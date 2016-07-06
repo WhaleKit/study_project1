@@ -119,7 +119,9 @@ class Location
 
 class Entity
 {
-
+public:
+    virtual Entity ()=0;
+    virtual ~Entity()=0;
 };
 
 class Character : public Entity
