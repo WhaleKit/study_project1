@@ -24,7 +24,7 @@ public:
     vector<Entity*> *environment_m;
 };
 
-
+float floorLevel = 600;
 
 class PlayableCharacter : public Entity
 {
@@ -51,12 +51,20 @@ public:
             {
                 currentAnimFrame_m+=animSpeed_m*lastFrameTime_arg.asMicroseconds();
                 speed_m.x = -walkingSpeed_m;
+                lookingLeft_m = true;
             }
             if (sf::Keyboard::isKeyPressed(Keyboard::D))
             {
                 currentAnimFrame_m+=animSpeed_m*lastFrameTime_arg.asMicroseconds();
                 speed_m.x = walkingSpeed_m;
+                lookingLeft_m = false;
             }
+        }
+        if (    ((sf::Keyboard::isKeyPressed(Keyboard::W))||(sf::Keyboard::isKeyPressed(Keyboard::Space)))
+                && onGround_m )
+        {
+            onGround_m=false;
+            speed_m.y = -jumpingSpeed_m;
         }
     }
 
@@ -65,7 +73,22 @@ public:
         readApplyUserInput(frameTime_arg);
 
         collizion_m->left += speed_m.x * frameTime_arg.asMicroseconds();
-        speed_m = sf::Vector2f(0,0);
+        speed_m.x = 0;
+
+        collizion_m->top += speed_m.y * frameTime_arg.asMicroseconds();
+
+        if (!onGround_m)
+        {
+            speed_m.y+= 9.8/(10000000);
+        }
+
+        if( (collizion_m->top + collizion_m->height)  > floorLevel)
+        {
+            collizion_m->top = floorLevel-collizion_m->height;
+            speed_m.y = max(0.0f, speed_m.y);
+            onGround_m=true;
+        }
+
     }
 
     sf::Drawable* getDrawableComponent() override
@@ -96,7 +119,7 @@ public:
 
     Vector2f speed_m         = Vector2f(0,0);
 
-    float jumpingSpeed_m        = 0.06; //вертикальная скорость, которая ему придается при прыжке
+    float jumpingSpeed_m        = 0.002; //вертикальная скорость, которая ему придается при прыжке
     float walkingSpeed_m        = 0.0006;  //скорость, с которой он ходит
     float animSpeed_m           = 0.00001; // смен кадров в микросекунду
     sf::FloatRect* collizion_m  = nullptr;
@@ -107,7 +130,7 @@ public:
 int main()
 {
 
-    sf::RenderWindow window(sf::VideoMode(400, 300), "SFML works!", sf::Style::Close);
+    sf::RenderWindow window(sf::VideoMode(800, 600), "SFML works!", sf::Style::Close);
     sf::CircleShape shape(100.f);
     shape.setFillColor(sf::Color::Green);
 
