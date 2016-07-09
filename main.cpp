@@ -3,8 +3,8 @@
 #include <SFML/Audio.hpp>
 
 #include <cmath>
-
-#include <map>
+#include <utility>
+#include <vector>
 
 using namespace std;
 using namespace sf;
@@ -26,10 +26,11 @@ public:
     //использовать флаг drawable, или пересмотреть иерархию классов
 
     vector<Entity*> *environment_m;
-    char ** location_m;
 };
 
-float floorLevel = 600;
+float floorLevel = 1200;
+
+
 
 class Tile
 {
@@ -41,10 +42,68 @@ public:
 
     bool solid_m = true;
     sf::RectangleShape* drawableComponent;
+};
 
-    typedef void (*effectFunction)(Entity*, const Vector2f&);
+class Tileset2d
+{
+public:
+    Tileset2d (Uint16 width_arg, Uint16 height_arg)
+        :   content_m(height_arg*width_arg, nullptr),
+            height_m(height_arg),
+            width_m(width_arg)
+    {    }
 
-    effectFunction onInteract_m = nullptr; //вызывается при прикосновении/коллизии ентитей, если не равна нулю
+    //reference to pointer
+    Tile*& at (Vector2u index2d_arg)
+    {
+        return at(index2d_arg.x, index2d_arg.y);
+    }
+    Tile*& at (Uint16 x_arg, Uint16 y_arg)
+    {
+        return content_m[y_arg*width_m + x_arg];
+    }
+    Tile*& at (Uint32 index_arg)
+    {
+        return content_m[index_arg];
+    }
+    Tile* const& at (Vector2u index2d_arg) const
+    {
+        return at(index2d_arg.x, index2d_arg.y);
+    }
+    Tile* const & at (Uint16 x_arg, Uint16 y_arg) const
+    {
+        return content_m[y_arg*width_m + x_arg];
+    }
+    Uint16 getWidth () const
+    {
+        return width_m;
+    }
+    Uint16 getHeight() const
+    {
+        return height_m;
+    }
+    Vector2u getTileIndexByCoords(float x_arg, float y_arg) const
+    {
+        return getTileIndexByCoords ( Vector2f(x_arg, y_arg) );
+    }
+    Vector2u getTileIndexByCoords(Vector2f coords_arg) const
+    {
+        return Vector2u( static_cast<float>(coords_arg.x)/tileSize, static_cast<float>(coords_arg.y)/tileSize );
+    }
+    FloatRect getTileRectByCoords(Uint16 x, Uint16 y) const
+    {
+        return getTileRectByCoords(Vector2u(x,y));
+    }
+    FloatRect getTileRectByCoords(Vector2u index_coord) const
+    {
+        return FloatRect(index_coord.x*tileSize, index_coord.y*tileSize, tileSize, tileSize);
+    }
+
+    Uint8 tileSize = 100;
+private:
+    vector<Tile*> content_m;
+    Uint16 height_m;
+    Uint16 width_m;
 };
 
 class PlayableCharacter : public Entity
@@ -59,7 +118,7 @@ public:
 
     }
 
-    void readApplyUserInput(sf::Time lastFrameTime_arg)
+    void readApplyUserInput()
     {
         if ( sf::Keyboard::isKeyPressed(sf::Keyboard::A)!=Keyboard::isKeyPressed(Keyboard::D) )
         {
@@ -93,21 +152,29 @@ public:
 
     void Update(sf::Time frameTime_arg) override
     {
-        readApplyUserInput(frameTime_arg);
+        readApplyUserInput();
 
         currentAnimFrame_m+=animSpeed_m*frameTime_arg.asMicroseconds();
 
-        collizion_m->left += speed_m.x * frameTime_arg.asMicroseconds();
+        //поиск сначала горизонтальных а потом вертикальных коллизий - тупик
 
+        //сначала двигаем - потом проверям на коллизию, потом отодвигаем назад
+        //если есть коллизия сбоку - сбрасываем горизонтальную скорость
+        //снизу - вертикальную
+        //основная проблема - прыжок на уголок
+
+
+        //apply state-specific things
         if (state_m == State_m::standing)
             speed_m.x = 0;
 
         collizion_m->top += speed_m.y * frameTime_arg.asMicroseconds();
 
-        if (!onGround_m)
+        if (state_m == State_m::inAir)
         {
             speed_m.y+= 9.8/(10000000);
         }
+
 
         if( (collizion_m->top + collizion_m->height)  > floorLevel)
         {
@@ -165,8 +232,6 @@ public:
     //смещение левого верхнего угла спрайта от верхнего левого угла коллизии
     float currentAnimFrame_m=0;
 
-    bool onGround_m         = false;
-
     enum class State_m {walking, standing, inAir};
     State_m state_m         = State_m::standing;
 
@@ -174,11 +239,14 @@ public:
 
     Vector2f speed_m        = Vector2f(0,0);
 
+    //скорость - в пикселях в микросекунду
     float jumpingSpeed_m        = 0.0018; //вертикальная скорость, которая ему придается при прыжке
     float walkingSpeed_m        = 0.0006;  //скорость, с которой он ходит
     float animSpeed_m           = 0.00001; // смен кадров в микросекунду
     sf::FloatRect* collizion_m  = nullptr;
     Sprite* renderComponent_m   = nullptr;
+
+    Tileset2d* locationMap_m    = nullptr;
     //Entity, с полем vector<Entity*> *environment_m, которая родитель
     //будет использоваться позже, для взаимодействия с миром
 };
@@ -187,41 +255,41 @@ int main()
 {
 
     //tiles
-    constexpr Uint8 tileSize = 100;
     Tile stone;
     stone.solid_m = true;
-    sf::RectangleShape stoneTileShape(Vector2f(tileSize, tileSize));
+    sf::RectangleShape stoneTileShape(Vector2f(100, 100));
     stoneTileShape.setFillColor(sf::Color( 200, 200, 200));
     stone.drawableComponent = &stoneTileShape;
 
     //levelMap
-    constexpr Uint16 levelHight = 9;
-    constexpr Uint16 levelWidth = 19;
-    Tile* levelTiles[levelWidth][levelHight];
+    //Tile* levelTiles[levelWidth][levelHight];
+    Tileset2d levelTiles(38-14,11);
     {
         char * levelCheme[] =
         {
-            "sssssssssssssssssss",
-            "s                 s",
-            "s                 s",
-            "s                 s",
-            "s                 s",
-            "s                 s",
-            "s       sssssss   s",
-            "s             s   s",
-            "ssss   ssssssssssss"
+            "ssssssssssssssssssssssss",
+            "s                      s",
+            "s                      s",
+            "s                      s",
+            "s   sssss              s",
+            "s                      s",
+            "s         sssss        s",
+            "s             s        s",
+            "s             s        s",
+            "s             s        s",
+            "ssss   sssssssssssssssss"
         };
 
-        for (int x=0; x<levelWidth; ++x)
-            for (int y=0; y<levelHight; ++y)
+        for (int x=0; x<levelTiles.getWidth(); ++x)
+            for (int y=0; y<levelTiles.getHeight(); ++y)
         {
             switch (levelCheme[y][x])
             {
             case 's':
-                levelTiles[x][y] = &stone;
+                levelTiles.at(x, y) = &stone;
                 break;
             default:
-                levelTiles[x][y] = nullptr;
+                break;
             }
         }
     }
@@ -236,7 +304,6 @@ int main()
     sprt.setPosition(30, 40);
     FloatRect FangCollizion = sprt.getGlobalBounds();
     PlayableCharacter Fang(&FangCollizion ,&sprt);
-
     //level content
     vector<Entity*> entitiesOnLevel;
     entitiesOnLevel.push_back(&Fang);
@@ -276,8 +343,6 @@ int main()
         //rendering
 
         window.clear();
-        window.setView(window.getDefaultView());
-        window.draw(shape);
         myCamera.setCenter(Vector2f (Fang.collizion_m->left +Fang.collizion_m->width/2,
                                        Fang.collizion_m->top+Fang.collizion_m->height/2) );
         window.setView(myCamera);
@@ -285,15 +350,18 @@ int main()
         {
             window.draw( *(toDraw->getDrawableComponent()) );
         }
-        for (int x=0; x<levelWidth; ++x)
-            for (int y=0; y<levelHight; ++y)
+        for (int x=0; x<levelTiles.getWidth(); ++x)
+            for (int y=0; y<levelTiles.getHeight(); ++y)
         {
-            if (levelTiles[x][y] !=nullptr)
+            if (levelTiles.at(x,y) !=nullptr)
             {
-                levelTiles[x][y]->drawableComponent->setPosition(tileSize*(x), tileSize*(y));
-                window.draw( * (levelTiles[x][y]->drawableComponent) );
+                levelTiles.at(x,y)->drawableComponent->setPosition(levelTiles.tileSize*(x), levelTiles.tileSize*(y));
+                window.draw( * (levelTiles.at(x,y)->drawableComponent) );
             }
         }
+
+        window.setView(window.getDefaultView());
+        window.draw(shape);
 
         window.display();
     }
