@@ -122,22 +122,21 @@ public:
         }
         else if (state_m == State_m::standing)
         {
-            if (currentAnimFrame_m>4)
-                currentAnimFrame_m = fmod (currentAnimFrame_m, 4.0f);
+            if (currentAnimFrame_m>5)
+                currentAnimFrame_m = fmod (currentAnimFrame_m, 5.0f);
 
-            if (currentAnimFrame_m>3.0)
+            if (currentAnimFrame_m>3)
             {
                 if (lookingLeft_m)
-                    renderComponent_m->setTextureRect(IntRect(44+44*int(5.0f-currentAnimFrame_m), 189, -44, 50));
+                    renderComponent_m->setTextureRect(IntRect(44+44*int(5 - currentAnimFrame_m), 189, -44, 50));
                 else
-                    renderComponent_m->setTextureRect(IntRect(44*int(5.0f-currentAnimFrame_m), 189, 44, 50));
+                    renderComponent_m->setTextureRect(IntRect(44*int(5 - currentAnimFrame_m), 189, 44, 50));
             }
-
-            if (lookingLeft_m)
+            else if (lookingLeft_m)
                 renderComponent_m->setTextureRect(IntRect(44+44*int(currentAnimFrame_m), 189, -44, 50));
             else
                 renderComponent_m->setTextureRect(IntRect(44*int(currentAnimFrame_m), 189, 44, 50));
-        }
+        } //189 - top, 44 - width, 50 - height
 
 
         return renderComponent_m;
