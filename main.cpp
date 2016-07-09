@@ -22,11 +22,30 @@ public:
     virtual void Update(sf::Time frameTime_arg)=0;
 
     virtual sf::Drawable* getDrawableComponent()=0;//должен возвращать nullptr, если не предназначем для рисования
+    //хотя это не очень-то эффективно, если я буду делать много энтити не предназначенных для рисования, лучше
+    //использовать флаг drawable, или пересмотреть иерархию классов
 
     vector<Entity*> *environment_m;
+    char ** location_m;
 };
 
 float floorLevel = 600;
+
+class Tile
+{
+public:
+    Tile(bool solid_arg)
+        :solid_m(solid_arg)
+        {    }
+    Tile(){}
+
+    bool solid_m = true;
+    sf::RectangleShape* drawableComponent;
+
+    typedef void (*effectFunction)(Entity*, const Vector2f&);
+
+    effectFunction onInteract_m = nullptr; //вызывается при прикосновении/коллизии ентитей, если не равна нулю
+};
 
 class PlayableCharacter : public Entity
 {
@@ -161,35 +180,79 @@ public:
     sf::FloatRect* collizion_m  = nullptr;
     Sprite* renderComponent_m   = nullptr;
     //Entity, с полем vector<Entity*> *environment_m, которая родитель
+    //будет использоваться позже, для взаимодействия с миром
 };
 
 int main()
 {
 
-    sf::RenderWindow window(sf::VideoMode(800, 600), "SFML works!", sf::Style::Close);
-    sf::CircleShape shape(100.f);
-    shape.setFillColor(sf::Color::Green);
+    //tiles
+    constexpr Uint8 tileSize = 100;
+    Tile stone;
+    stone.solid_m = true;
+    sf::RectangleShape stoneTileShape(Vector2f(tileSize, tileSize));
+    stoneTileShape.setFillColor(sf::Color( 200, 200, 200));
+    stone.drawableComponent = &stoneTileShape;
 
+    //levelMap
+    constexpr Uint16 levelHight = 9;
+    constexpr Uint16 levelWidth = 19;
+    Tile* levelTiles[levelWidth][levelHight];
+    {
+        char * levelCheme[] =
+        {
+            "sssssssssssssssssss",
+            "s                 s",
+            "s                 s",
+            "s                 s",
+            "s                 s",
+            "s                 s",
+            "s       sssssss   s",
+            "s             s   s",
+            "ssss   ssssssssssss"
+        };
+
+        for (int x=0; x<levelWidth; ++x)
+            for (int y=0; y<levelHight; ++y)
+        {
+            switch (levelCheme[y][x])
+            {
+            case 's':
+                levelTiles[x][y] = &stone;
+                break;
+            default:
+                levelTiles[x][y] = nullptr;
+            }
+        }
+    }
+
+    //playable character
     sf::Texture myTxtr;
     myTxtr.loadFromFile("fang.png");
-
     sf::Sprite sprt;
     sprt.setTexture(myTxtr);
     sprt.setTextureRect( IntRect(0, 244, 40, 50) );
-    sprt.setScale(3,3);
+    sprt.setScale(2,2);
     sprt.setPosition(30, 40);
-
     FloatRect FangCollizion = sprt.getGlobalBounds();
-
     PlayableCharacter Fang(&FangCollizion ,&sprt);
 
-
-    Clock clc; clc.restart();
-
+    //level content
     vector<Entity*> entitiesOnLevel;
-
     entitiesOnLevel.push_back(&Fang);
 
+
+    //View
+    sf::View myCamera;
+    myCamera.reset(FloatRect(0, 0, 1024, 768) );
+
+    Clock clc; clc.restart();
+    //window
+    sf::RenderWindow window(sf::VideoMode(1024, 768), "SFML works!", sf::Style::Close);
+    sf::CircleShape shape(100.f);
+    shape.setFillColor(sf::Color::Green);
+    window.setView(myCamera);
+    //main cycle
     while (window.isOpen())
     {
         sf::Time frameTime = clc.getElapsedTime();
@@ -210,13 +273,26 @@ int main()
             toUpdate->Update(frameTime);
         }
 
+        //rendering
+
         window.clear();
-
+        window.setView(window.getDefaultView());
         window.draw(shape);
-
+        myCamera.setCenter(Vector2f (Fang.collizion_m->left +Fang.collizion_m->width/2,
+                                       Fang.collizion_m->top+Fang.collizion_m->height/2) );
+        window.setView(myCamera);
         for (Entity* toDraw : entitiesOnLevel)
         {
             window.draw( *(toDraw->getDrawableComponent()) );
+        }
+        for (int x=0; x<levelWidth; ++x)
+            for (int y=0; y<levelHight; ++y)
+        {
+            if (levelTiles[x][y] !=nullptr)
+            {
+                levelTiles[x][y]->drawableComponent->setPosition(tileSize*(x), tileSize*(y));
+                window.draw( * (levelTiles[x][y]->drawableComponent) );
+            }
         }
 
         window.display();
