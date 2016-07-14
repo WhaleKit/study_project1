@@ -8,6 +8,7 @@
 #include <cassert>
 #include <limits>
 
+#include <fstream>
 #include <algorithm>
 #include <numeric>
 
@@ -91,7 +92,7 @@ public:
     vector<Entity*> *environment_m;
 };
 
-float floorLevel = 1200;
+float floorLevel = 1205;
 
 
 
@@ -222,456 +223,87 @@ Int8 DotPositionRelativeToVector (Vector2f dotCoords_arg, Vector2f vectorStartCo
 
 //данная функция меняет скорость и положение тела, но не нго габариты
 //возвращает true, если к концу работы под ногамии у тела есть опора, false - если таковой нет
-/*
+
+
+#define LOGGING_ENABLED
+
+
 bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, Vector2f & bodySpeed_arg, Time time_arg)
 {
-    const Vector2f origMoveVector(bodySpeed_arg* static_cast<float>(time_arg.asMicroseconds()) );
-    Vector2f moveVector(bodySpeed_arg* static_cast<float>(time_arg.asMicroseconds()) );
 
-    if (bodySpeed_arg==Vector2f(0,0) || bodySpeed_arg == Vector2f(0,0))
+    const Vector2f origMoveVector(bodySpeed_arg.x * time_arg.asMicroseconds(), bodySpeed_arg.y * time_arg.asMicroseconds() );
+    Vector2f moveVector(bodySpeed_arg.x * time_arg.asMicroseconds(), bodySpeed_arg.y * time_arg.asMicroseconds());
+#ifdef LOGGING_ENABLED
+{
+    static vector<tuple<FloatRect, Vector2f, Time>> log(30);
+
+    static unsigned num=0;
+
+    log[num] = make_tuple(body_arg, bodySpeed_arg, time_arg);
+    num = (num+1)%30;
+
+    static int left=10;
+
+    if (body_arg.left>1320)
     {
-        return false;
-    }
-
-    {
-        float xcoord = (moveVector.x>0) ? (body_arg.left+body_arg.width) : (body_arg.left);
-        float ycoord = (moveVector.y>0) ? (body_arg.top+body_arg.height) : (body_arg.top);
-        if (map_arg.XCoordToIndex(xcoord)==map_arg.XCoordToIndex(xcoord + moveVector.x) &&
-            map_arg.YCoordToIndex(ycoord)==map_arg.YCoordToIndex(ycoord + moveVector.y))
+        --left;
+        if (left==0)
         {
-            //если тело не пересекает границ тайлов, значит нет может быть столкновений с ними.
-            body_arg.top += moveVector.x;
-            body_arg.left +=moveVector.y;
-            return false;
-        }
-    }
+            cout << "\n\n\n\n\nNumber is " << num <<endl;
 
-    bool grounded=false; //имеется в виду "приземлился" а не "наказан"
+            tuple<FloatRect, Vector2f, Time> & current = log[num];
+            cout << 0<< ")top: "<< get<0>(current).top << " left: " << get<0>(current).left;
+            cout << "\n   speed: (" << get<1>(current).x <<", "
+                                << get<1>(current).y << ")";
+            cout << "\n   time = " << get<2>(current).asMicroseconds();
+            cout << "\n   move = (" << get<1>(current).x*get<2>(current).asMicroseconds()
+                                    <<", " << get<1>(current).y*get<2>(current).asMicroseconds() << ")" << endl;
 
-    //проверка, что вектор перемещения короче стороны тайла
-    if (moveVector.x > map_arg.tileSize || moveVector.y > map_arg.tileSize)
-    {
-        //если скорость слишком большая/тайлы маленькие - разбиваем движение на части и производим по частям
-        int stageCount = ceil( max( abs(moveVector.x) , abs(moveVector.y) )/ static_cast<float>(map_arg.tileSize));
-        for (int i = 0; i<stageCount; i++)
-        {
-            //вложенность рекурси - не обльше 1, т.к. я разбил движение на гарантированно достаточно малые куски
-            if (MoveTroughtTilesAndCollide(map_arg, body_arg, bodySpeed_arg, time_arg/static_cast<Int64>(stageCount) ))
-                grounded=true;
-            if (bodySpeed_arg==Vector2f(0,0))
-                break;
-        }
-        return grounded;
-    }
-
-    //проверка, чтобы тело не пролетело сквозь угол тайла
-    //для этого нужно смотреть, чтобы он своим углом не зацепился за угол тайла
-    if (bodySpeed_arg.y != 0 && bodySpeed_arg.x!=0)
-    {
-        if (bodySpeed_arg.y>0) //движемся вниз
-        {
-            if ( bodySpeed_arg.x>0 ) //движемся вниз вправо
+            for (unsigned i = num+1; i!=num; i = (i+1)%30)
             {
-                {
-                    //проверяем верхний правый угол
-                    Vector2f posUpCorner = getCornerCoords(body_arg, CornerOfRect::RightUp);
-                    Vector2u currentUpCornerTile = map_arg.CoordsToIndex(posUpCorner),
-                            newUpCornerTile = map_arg.CoordsToIndex(posUpCorner+moveVector);
-                    if ( (currentUpCornerTile.x!=newUpCornerTile.x) && (currentUpCornerTile.y != newUpCornerTile.y) )
-                    {
-                        //т.е. угол сдвинулся в новый блок не просто вниз/вбое, а по диагонали
-                        if (map_arg.at(currentUpCornerTile.x+1, newUpCornerTile.y)!= nullptr
-                            && map_arg.at(currentUpCornerTile.x+1, newUpCornerTile.y)->solid_m
-                            && (DotPositionRelativeToVector( map_arg.IndexToCoord(newUpCornerTile), posUpCorner, moveVector )<0))
-                        {
-                            //кажется у нас коллизия!
-                            //делаем полученное перемещение таким, чтобы при его выполнении тело втыкалось в угол, и не преодолевало его
-                            moveVector.x = map_arg.IndexToCoord(newUpCornerTile).x - posUpCorner.x;
-                        }
-                    }
-                }
-                {
-                    //теперь -левый нижний угол
-                    Vector2f posDLCorner = getCornerCoords(body_arg, CornerOfRect::LeftDown);
-                    Vector2u cornerTileIndex = map_arg.CoordsToIndex(posDLCorner),
-                            newCornerTileIndex = map_arg.CoordsToIndex(posDLCorner+moveVector);
-                    if( (cornerTileIndex.x != newCornerTileIndex.x)&&(cornerTileIndex.y!= newCornerTileIndex.y) )
-                    {
-                        Tile* tl = map_arg.at(cornerTileIndex.x, cornerTileIndex.y+1);
-                        if (tl!=nullptr && tl->solid_m
-                            && DotPositionRelativeToVector(map_arg.IndexToCoord(newCornerTileIndex), posDLCorner, moveVector )>0)
-                        {
-                            //столкновение снизу
-                            moveVector.y = minByAbs(map_arg.IndexToCoord(newCornerTileIndex).y - posDLCorner.y, moveVector.y );
-                            moveVector.x = minByAbs( (origMoveVector.x*(origMoveVector.y/moveVector.y)), moveVector.x );
-                            grounded=true;
-                        }
-                    }
-                }
-            }
-            else //движемся вниз влево
-            {
-                {//проследим за верхним левым углом
-                    Vector2f cornerULCoord = getCornerCoords(body_arg, CornerOfRect::LeftUp);
-                    Vector2u cornerTileIndex = map_arg.CoordsToIndex(cornerULCoord),
-                            newCornerTileIndex = map_arg.CoordsToIndex(cornerULCoord+moveVector);
-                    if( (cornerTileIndex.x != newCornerTileIndex.x)&&(cornerTileIndex.y!= newCornerTileIndex.y) )
-                    {
-                        Tile* tl = map_arg.at(cornerTileIndex.x-1, cornerTileIndex.y);
-                        if (tl!=nullptr && tl->solid_m
-                            && DotPositionRelativeToVector(map_arg.IndexToCoord(newCornerTileIndex.x+1, newCornerTileIndex.y)
-                                                           , cornerULCoord, moveVector )<0)
-                        {
-                            //столкновение сбоку
-                            moveVector.x = minByAbs (moveVector.x, map_arg.XIndexToCoord(cornerTileIndex.x));
-                        }
-                    }
-                }
-                {//за нижним правым
-                    Vector2f cornerDRCoord = getCornerCoords(body_arg, CornerOfRect::RightDown);
-                    Vector2u cornerTileIndex = map_arg.CoordsToIndex(cornerDRCoord),
-                            newCornerTileIndex = map_arg.CoordsToIndex(cornerDRCoord+moveVector);
-                    if( (cornerTileIndex.x != newCornerTileIndex.x)&&(cornerTileIndex.y!= newCornerTileIndex.y) )
-                    {
-                        Tile* tl = map_arg.at(cornerTileIndex.x, cornerTileIndex.y+1);
-                        if (tl!=nullptr && tl->solid_m
-                            && DotPositionRelativeToVector(map_arg.IndexToCoord(newCornerTileIndex.x+1, newCornerTileIndex.y)
-                                                           , cornerDRCoord, moveVector )>0)
-                        {
-                            //столкновение снизу
-                            moveVector.y = minByAbs(moveVector.y, map_arg.YCoordToIndex(newCornerTileIndex.y) - cornerDRCoord.y);
-                            moveVector.x = minByAbs( moveVector.x, origMoveVector.x*(origMoveVector.y/moveVector.y) );
-                            grounded=true;
-                        }
-                    }
-                }
-            }
-        }
-        else //
-        {
-            if ( bodySpeed_arg.x>0 ) //движемся вверх вправо
-            {
-                {//левый верхний
-                    Vector2f cornerULCoord = getCornerCoords(body_arg, CornerOfRect::LeftUp);
-                    Vector2u cornerTileIndex = map_arg.CoordsToIndex(cornerULCoord),
-                            newCornerTileIndex = map_arg.CoordsToIndex(cornerULCoord+moveVector);
-                    if( (cornerTileIndex.x != newCornerTileIndex.x)&&(cornerTileIndex.y!= newCornerTileIndex.y) )
-                    {
-                        Tile* tl = map_arg.at(cornerTileIndex.x, cornerTileIndex.y-1);
-                        if (tl!=nullptr && tl->solid_m
-                            && DotPositionRelativeToVector(map_arg.IndexToCoord(cornerTileIndex.x+1, cornerTileIndex.y)
-                                                           , cornerULCoord, moveVector )<0)
-                        {
-                            //столкновение об потолок
-                            moveVector.y = minByAbs(moveVector.y, map_arg.YIndexToCoord(cornerTileIndex.y) - cornerULCoord.y );
-                        }
-                    }
-                }
-                {//нижний правый
-                    Vector2f cornerDRCoord = getCornerCoords(body_arg, CornerOfRect::RightDown);
-                    Vector2u cornerTileIndex = map_arg.CoordsToIndex(cornerDRCoord),
-                            newCornerTileIndex = map_arg.CoordsToIndex(cornerDRCoord+moveVector);
-                    if( (cornerTileIndex.x != newCornerTileIndex.x)&&(cornerTileIndex.y!= newCornerTileIndex.y) )
-                    {
-                        Tile* tl = map_arg.at(cornerTileIndex.x+1, cornerTileIndex.y);
-                        if (tl!=nullptr && tl->solid_m
-                            &&DotPositionRelativeToVector(map_arg.IndexToCoord(cornerTileIndex.x+1, cornerTileIndex.y)
-                                                          , cornerDRCoord, moveVector )>0)
-                        {
-                            //столкновение об правую стенку
-                            moveVector.x = minByAbs(moveVector.x
-                                                    , map_arg.XIndexToCoord(cornerTileIndex.x+1) - cornerDRCoord.x);
-                        }
-                    }
-                }
-            }
-            else //движемся вверх влево
-            {
-                {//верхний правый
-                    Vector2f cornerURCoord = getCornerCoords(body_arg, CornerOfRect::RightUp);
-                    Vector2u cornerTileIndex = map_arg.CoordsToIndex(cornerURCoord),
-                            newCornerTileIndex = map_arg.CoordsToIndex(cornerURCoord+moveVector);
-                    if( (cornerTileIndex.x != newCornerTileIndex.x)&&(cornerTileIndex.y!= newCornerTileIndex.y) )
-                    {
-                        Tile* tl = map_arg.at(cornerTileIndex.x, cornerTileIndex.y-1);
-                        if (tl!=nullptr && tl->solid_m
-                            &&DotPositionRelativeToVector(map_arg.IndexToCoord(cornerTileIndex)
-                                                          , cornerURCoord, moveVector )<0)
-                        {
-                            //столкновение об потолок
-                            moveVector.y = minByAbs(moveVector.y, map_arg.YIndexToCoord(cornerTileIndex.y) - cornerURCoord.y );
-                        }
-                    }
-                }
-                {//нижний левый
-                    Vector2f cornerDLCoord = getCornerCoords(body_arg, CornerOfRect::LeftDown);
-                    Vector2u cornerTileIndex = map_arg.CoordsToIndex(cornerDLCoord),
-                            newCornerTileIndex = map_arg.CoordsToIndex(cornerDLCoord+moveVector);
-                    if( (cornerTileIndex.x != newCornerTileIndex.x)&&(cornerTileIndex.y!= newCornerTileIndex.y) )
-                    {
-                        Tile* tl = map_arg.at(cornerTileIndex.x, cornerTileIndex.y-1);
-                        if (tl!=nullptr && tl->solid_m
-                            &&DotPositionRelativeToVector(map_arg.IndexToCoord(cornerTileIndex)
-                                                          , cornerDLCoord, moveVector )>0)
-                        {
-                            //сбоку
-                            moveVector.x = minByAbs(moveVector.x, map_arg.XIndexToCoord(cornerTileIndex.x) - cornerDLCoord.x);
-                        }
-                    }
-                }
-            }
-        }
-    }//конец блока, обрабатывающего столкновения об углы при движении по диагонали
-    //кода много, но выполняется только 1/4 часть, а то и меньше
-
-    //поиск столкновений об грани блоков
-    {
-        // гориз. составляющая
-        {
-            Vector2u upperTile, downTile;
-
-            if (moveVector.x>0)
-            {
-                upperTile = map_arg.CoordsToIndex(getCornerCoords(body_arg, CornerOfRect::RightUp  )+moveVector);
-                downTile = map_arg.CoordsToIndex(getCornerCoords(body_arg, CornerOfRect::RightDown)+moveVector);
-            }
-            else
-            {
-                upperTile = map_arg.CoordsToIndex(getCornerCoords(body_arg, CornerOfRect::LeftUp  )+moveVector);
-                downTile = map_arg.CoordsToIndex(getCornerCoords(body_arg, CornerOfRect::LeftDown)+moveVector);
-            }
-            if (upperTile!=downTile)
-            {
-                if (  map_arg.YIndexToCoord(upperTile.y-1) > body_arg.top
-                    && map_arg.at (upperTile)!=nullptr && map_arg.at(upperTile)->solid_m )
-                {
-                    moveVector.x = minByAbs(moveVector.x,
-                                            map_arg.XIndexToCoord( (moveVector.x>0)? (upperTile.x) : (upperTile.x-1))
-                                            - (moveVector.x>0 ) ?  (body_arg.left+body_arg.width) : body_arg.left);
-                }
-
-                for (Uint16 i = upperTile.y+1; i < downTile.y; ++i) //значение y возрастает "вниз"
-                {
-                    Vector2u currentTileI = Vector2u (upperTile.x, i);
-                    if (map_arg.at (currentTileI)!=nullptr && map_arg.at(currentTileI)->solid_m )
-                        moveVector.x = minByAbs(moveVector.x,
-                                                map_arg.XIndexToCoord( (moveVector.x>0)? (currentTileI.x) : (currentTileI.x-1))
-                                                    - (moveVector.x>0 ) ?  (body_arg.left+body_arg.width) : body_arg.left
-                                                );
-                }
-
-                if (  map_arg.YIndexToCoord(downTile.y) < (body_arg.top+body_arg.height)
-                    && map_arg.at (downTile)!=nullptr && map_arg.at(downTile)->solid_m )
-                {
-                    moveVector.x = minByAbs(moveVector.x,
-                                    map_arg.XIndexToCoord( (moveVector.x>0)? (downTile.x) : (downTile.x-1))
-                                    - (moveVector.x>0 ) ?  (body_arg.left+body_arg.width) : body_arg.left);
-                }
-
-            }
-            else
-            {
-                if ( (map_arg.YCoordToIndex(body_arg.top) == upperTile.y)
-                        && (map_arg.at(upperTile)!=nullptr) && map_arg.at(upperTile)->solid_m)
-                {
-                    moveVector.x = minByAbs(moveVector.x,
-                                            map_arg.XIndexToCoord( (moveVector.x>0)? (upperTile.x) : (upperTile.x-1))
-                                            - (moveVector.x>0 ) ?  (body_arg.left+body_arg.width) : body_arg.left );
-                }
-            }
-        }//конец обработки гориз. составляющей
-
-        //вертикальная составляющая
-        {
-            Vector2u leftTileI, rightTileI;
-            if (moveVector.y>0)
-            {//вниз
-                leftTileI =  map_arg.CoordsToIndex(  Vector2f(body_arg.left,                body_arg.top+body_arg.height)+moveVector );
-                rightTileI=  map_arg.CoordsToIndex(  Vector2f(body_arg.left+body_arg.width, body_arg.top+body_arg.height)+moveVector );
-            }
-            else
-            {//вверх
-                leftTileI =  map_arg.CoordsToIndex(  Vector2f(body_arg.left,                body_arg.top)+moveVector );
-                rightTileI=  map_arg.CoordsToIndex(  Vector2f(body_arg.left+body_arg.width, body_arg.top)+moveVector );
-            }
-            if (leftTileI!=rightTileI)
-            {
-                if ( map_arg.XIndexToCoord(leftTileI.x+1) >= body_arg.left
-                    && map_arg.at(leftTileI)!=nullptr && map_arg.at(leftTileI)->solid_m )
-                {
-                    if (moveVector.y>0)
-                    {
-                        //столкновение снизу
-                        grounded=true;
-
-                        moveVector.y = minByAbs(moveVector.y, map_arg.YIndexToCoord( leftTileI.y ) - (body_arg.top+body_arg.height));
-                        moveVector.x = minByAbs( (origMoveVector.x*(origMoveVector.y/moveVector.y)), moveVector.x );
-                    }
-                    else
-                    {
-                        //удар об потолок
-                        moveVector.y = minByAbs(moveVector.y, map_arg.YIndexToCoord( leftTileI.y+1 ) - (body_arg.top));
-                    }
-                }
-                for (Uint16 i = leftTileI.x+1; i<rightTileI.x; i++)
-                {
-                    Vector2u currentTileI (i, leftTileI.y);
-                    if (map_arg.at (currentTileI)!=nullptr && map_arg.at(currentTileI)->solid_m )
-                    {
-                        if (moveVector.y>0)
-                        {
-                            //на под
-                            grounded=true;
-                            moveVector.y = minByAbs(moveVector.y, map_arg.YIndexToCoord( currentTileI.y ) - (body_arg.top+body_arg.height) );
-                            moveVector.x = minByAbs( (origMoveVector.x*(origMoveVector.y/moveVector.y)), moveVector.x );
-                        }
-                        else
-                        {
-                            //об потолок
-                            moveVector.y = minByAbs(moveVector.y, map_arg.YIndexToCoord( currentTileI.y+1 ) - (body_arg.top));
-                        }
-                    }
-                }
-                if (map_arg.XIndexToCoord(rightTileI.x) <= (body_arg.left+body_arg.width)
-                    && map_arg.at(rightTileI)!=nullptr && map_arg.at(rightTileI)->solid_m )
-                {
-                    if (moveVector.y>0)
-                    {
-                        //столкновение снизу
-                        grounded=true;
-
-                        moveVector.y = minByAbs(moveVector.y, map_arg.YIndexToCoord( rightTileI.y ) - (body_arg.top+body_arg.height) );
-                        moveVector.x = minByAbs( (origMoveVector.x*(origMoveVector.y/moveVector.y)), moveVector.x );
-                    }
-                    else
-                    {
-                        moveVector.y = minByAbs(moveVector.y, map_arg.YIndexToCoord( rightTileI.y+1 ) - (body_arg.top) );
-                    }
-                }
-            }
-            else
-            {
-                if ( (map_arg.XCoordToIndex(body_arg.left) == leftTileI.x)
-                        && (map_arg.at(leftTileI)!=nullptr) && map_arg.at(leftTileI)->solid_m)
-                {
-                    if (moveVector.y>0)
-                    {
-                        grounded=true;
-
-                        moveVector.y = minByAbs(moveVector.y, map_arg.YIndexToCoord( leftTileI.y ) - (body_arg.top+body_arg.height) );
-                        moveVector.x = minByAbs( (origMoveVector.x*(origMoveVector.y/moveVector.y)), moveVector.x );
-                    }
-                    else
-                    {
-                        moveVector.y = minByAbs(moveVector.y, map_arg.YIndexToCoord( leftTileI.y-1 ) - (body_arg.top) );
-                    }
-                }
+                tuple<FloatRect, Vector2f, Time> & current = log[i];
+                cout << int( ( int(i) - int(num) )>0? ( int(i)- int(num)%30) : (30+(i- int(num)%30))  ) -10
+                        << ")top: "<< get<0>(current).top << " left: " << get<0>(current).left;
+                cout << "\n   speed: (" << get<1>(current).x <<", "
+                                << get<1>(current).y << ")";
+                cout << "\n   time = " << get<2>(current).asMicroseconds();
+            cout << "\n   move = (" << get<1>(current).x*get<2>(current).asMicroseconds()
+                                    <<", " << get<1>(current).y*get<2>(current).asMicroseconds() << ")" << endl;
             }
 
         }
-    }//конец кода ищущего прямые столкновения
-
-
-    //код обрабатывающий "прыжки на углы" по диагонали, если тело не столкнулось ни с чем до сих пор
-    float xcoord = (moveVector.x>0) ? (body_arg.left+body_arg.width) : (body_arg.left);
-    float ycoord = (moveVector.y>0) ? (body_arg.top+body_arg.height) : (body_arg.top);
-
-    if (origMoveVector == moveVector
-        && map_arg.XCoordToIndex(xcoord)!=map_arg.XCoordToIndex(xcoord + moveVector.x)
-        && map_arg.YCoordToIndex(ycoord)!=map_arg.YCoordToIndex(ycoord + moveVector.y) )
-    {
-
-
-        CornerOfRect direction;
-        if (moveVector.x>0)
-            if (moveVector.y>0)
-                direction = CornerOfRect::RightDown;
-            else
-                direction = CornerOfRect::RightUp;
-        else
-            if (moveVector.y>0)
-                direction = CornerOfRect::LeftDown;
-            else
-                direction = CornerOfRect::LeftUp;
-
-        //угол коллизии тела, которй падает на тайл
-        Vector2f movingDot = getCornerCoords(body_arg, direction);
-
-        Vector2u tileIndex = map_arg.CoordsToIndex(movingDot+moveVector);
-
-
-        //угол тайла на который падает тело
-        Vector2f tileCorner= getCornerCoords( map_arg.getTileRectByIndex(tileIndex), OppositeRectCorner(direction) );
-        if (map_arg.at(tileIndex)!=nullptr && (map_arg.at(tileIndex)->solid_m))
-        {
-            if ( DotPositionRelativeToVector( tileCorner, movingDot, moveVector ) > 0 )
-            {
-                if (moveVector.y>0)
-                {
-                    //столкновение об стенку блока
-                    moveVector.x = tileCorner.x - movingDot.x;
-                }
-                else
-                {
-                    //об потолок блока
-                    moveVector.y = tileCorner.y - movingDot.y;
-                }
-            }
-            else
-            {
-                if (moveVector.y>0)
-                {
-                    //на пол
-                    grounded = true;
-                    moveVector.y = minByAbs(moveVector.y, tileCorner.y - movingDot.y);
-                    moveVector.x = minByAbs( (origMoveVector.x*(origMoveVector.y/moveVector.y)), moveVector.x );
-
-                }
-                else
-                {
-                    //об стенку
-                    moveVector.x = tileCorner.x - movingDot.x;
-                }
-            }
-        }
     }
-
-    if (moveVector.x != origMoveVector.x)
-    {
-        bodySpeed_arg.x = 0;
-    }
-    if (moveVector.y != origMoveVector.y)
-    {
-        bodySpeed_arg.y = 0;
-    }
-
-    body_arg.left += moveVector.x;
-    body_arg.top += moveVector.y;
-    return grounded;
+    else
+        left = 10;
 }
+#endif // LOGGING_ENABLED
 
-*/
-
-
-bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, Vector2f & bodySpeed_arg, Time time_arg)
-{
-
-    const Vector2f origMoveVector(bodySpeed_arg* static_cast<float>(time_arg.asMicroseconds()) );
-    Vector2f moveVector(bodySpeed_arg* static_cast<float>(time_arg.asMicroseconds()) );
 
     if (bodySpeed_arg==Vector2f(0,0) || bodySpeed_arg == Vector2f(0,0))
     {
         return false;
     }
-
 
     static auto DotCrossesTheHorBoundary = [&map_arg, &moveVector] ( float xcoord ) ->bool
         {
-            return map_arg.XCoordToIndex(xcoord) != map_arg.XCoordToIndex(xcoord+moveVector.x);
+            float epsilon = ( abs(moveVector.x)+abs(xcoord))*epsiFraction;
+            if (moveVector.x>0)
+                return map_arg.XCoordToIndex(xcoord-epsilon) != map_arg.XCoordToIndex(xcoord+moveVector.x+epsilon);
+            else if (moveVector.x!=0)
+                return map_arg.XCoordToIndex(xcoord+epsilon) != map_arg.XCoordToIndex(xcoord+moveVector.x-epsilon);
+            else
+                return false;
         };
     static auto DotCrossesTheVerBoundary = [&map_arg, &moveVector] ( float ycoord ) ->bool
         {
-            return map_arg.YCoordToIndex(ycoord) != map_arg.YCoordToIndex(ycoord+moveVector.y);
+            float epsilon =  ( abs(moveVector.y)+abs(ycoord))*epsiFraction;
+            if (moveVector.y>0)
+                return map_arg.YCoordToIndex(ycoord-epsilon) != map_arg.YCoordToIndex(ycoord+moveVector.y+epsilon);
+            else if (moveVector.y!=0)
+                return map_arg.YCoordToIndex(ycoord+epsilon) != map_arg.YCoordToIndex(ycoord+moveVector.y-epsilon);
+            else
+                return false;
+
         };
 
     bool crossedVerticalBoundary, crossedHorizontalBoundary;
@@ -737,14 +369,14 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
                 {
                     grounded = true;
                     float floorY =  map_arg.YIndexToCoord( map_arg.YCoordToIndex(body_arg.top+body_arg.height) + 1 );
-                    moveVector.y = floorY - (body_arg.top+body_arg.height);
+                    moveVector.y = floorY*(1-epsiFraction) - (body_arg.top+body_arg.height);
 
                     moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
                 }
                 else
                 {
                     float ceilingY = map_arg.YCoordToIndex( map_arg.YIndexToCoord(body_arg.top));
-                    moveVector.y = ceilingY - body_arg.top;
+                    moveVector.y = ceilingY*(1+epsiFraction) - body_arg.top;
 
                     moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
                 }
@@ -1007,6 +639,7 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
 #undef FINISH
 }
 
+
 class PlayableCharacter : public Entity
 {
 public:
@@ -1065,9 +698,9 @@ public:
             currentIter=frameTimes.begin();
             cout << "mics: "<< ( accumulate(frameTimes.begin(), frameTimes.end(), 0) / 400)  << endl;
         }
+        */
 
         currentAnimFrame_m+=animSpeed_m*frameTime_arg.asMicroseconds();
-        */
 
 
         //apply state-specific things
@@ -1077,8 +710,6 @@ public:
         //двигаемся сквозь тайловую карту
         if (MoveTroughtTilesAndCollide(*locationMap_m, *collizion_m, speed_m, frameTime_arg))
             state_m=State_m::standing;
-
-        collizion_m->top += speed_m.y * frameTime_arg.asMicroseconds();
 
         if (state_m == State_m::inAir)
         {
@@ -1150,8 +781,8 @@ public:
     Vector2f speed_m        = Vector2f(0,0);
 
     //скорость - в пикселях в микросекунду
-    float jumpingSpeed_m        = 0.0012; //вертикальная скорость, которая ему придается при прыжке
-    float walkingSpeed_m        = 0.0006;  //скорость, с которой он ходит
+    float jumpingSpeed_m        = 0.002; //вертикальная скорость, которая ему придается при прыжке
+    float walkingSpeed_m        = 0.001;  //скорость, с которой он ходит
     float animSpeed_m           = 0.00001; // смен кадров в микросекунду
     sf::FloatRect* collizion_m  = nullptr;
     Sprite* renderComponent_m   = nullptr;
@@ -1161,7 +792,7 @@ public:
     //будет использоваться позже, для взаимодействия с миром
 };
 
-int main()
+int main_()
 {
     //tiles
     Tile stone;
@@ -1203,10 +834,10 @@ int main()
         }
     }
 
-    FloatRect fr (170, 900-0.0003, 80, 100);
+    FloatRect fr (100, 899.283 , 80, 100);
 
-    Vector2f speed (0, 0.0005);
-    Time time = microseconds(1);
+    Vector2f speed (0, 0.00171212);
+    Time time = microseconds(241);
     while (true)
     {
         ;
@@ -1214,7 +845,7 @@ int main()
     }
 }
 
-int main_fun()
+int main()
 {
 
     //tiles
@@ -1285,6 +916,7 @@ int main_fun()
     shape.setFillColor(sf::Color::Green);
     window.setView(myCamera);
     //main cycle
+    static const Time minFrameTime = seconds(1/480); //120 fps should be enought
     while (window.isOpen())
     {
         sf::Time frameTime = clc.getElapsedTime();
@@ -1333,6 +965,11 @@ int main_fun()
         window.draw(shape);
 
         window.display();
+
+        if (frameTime<minFrameTime)
+        {
+            sleep(minFrameTime-frameTime);
+        }
     }
     return 0;
 }
