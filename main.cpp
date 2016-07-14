@@ -5,9 +5,23 @@
 #include <cmath>
 #include <utility>
 #include <vector>
+#include <cassert>
+#include <limits>
+
+#include <algorithm>
+#include <numeric>
 
 using namespace std;
 using namespace sf;
+
+//вы стоите на блоке пола. Очевидно, ваши ноги не относятся к тайлу, на котором вы стоите, арифметика чисел с плавающей запятой
+//считает иначе,
+//так что вы спотыкаетесь на ровном месте. Отныне вам нужно притворятся висящим в воздухе где-то в 1/100000 вашего размера от пола.
+
+//а еще вы подопрете стену справа от вас, то окажется, что ваш бок, которым вы обперлись уже внутри нее
+constexpr float epsiFraction = numeric_limits<float>::epsilon()*2;
+//однако, совершенно непоятно, отчего разрабам sfml не сделали FloatRect constexpr-совместимым
+const FloatRect epsiQuad(0, 0, epsiFraction, epsiFraction);
 
 template<typename T>
 T minByAbs(T arg1, T arg2 )
@@ -33,6 +47,8 @@ Vector2f getCornerCoords(FloatRect const& rect_arg, CornerOfRect corner_arg)
         return Vector2f( rect_arg.left+rect_arg.width,  rect_arg.top                );
     case CornerOfRect::RightDown:
         return Vector2f( rect_arg.left+rect_arg.width,  rect_arg.top+rect_arg.height);
+    default:
+        assert(false); //"похоже, у квадрата появилась 5-я сторона"
     }
 }
 CornerOfRect OppositeRectCorner (CornerOfRect arg)
@@ -50,6 +66,8 @@ CornerOfRect OppositeRectCorner (CornerOfRect arg)
 
     case CornerOfRect::RightDown:
         return CornerOfRect::LeftUp;
+    default:
+        assert(false); //"похоже, у квадрата появилась 5-я сторона"
     }
 }
 
@@ -117,7 +135,10 @@ public:
     }
     Tile* const & at (Uint16 x_arg, Uint16 y_arg) const
     {
-        return content_m[y_arg*width_m + x_arg];
+        if (x_arg<width_m && x_arg>=0 && y_arg<height_m && y_arg>=0)
+            return content_m[y_arg*width_m + x_arg];
+        else
+            return nullptr;
     }
     inline Uint16 getWidth () const
     {
@@ -137,7 +158,7 @@ public:
     }
     inline Vector2u CoordsToIndex(float x_arg, float y_arg) const
     {
-        return CoordsToIndex ( Vector2f(XCoordToIndex(x_arg), YCoordToIndex(y_arg)) );
+        return  Vector2u(XCoordToIndex(x_arg), YCoordToIndex(y_arg)) ;
     }
     inline Vector2u CoordsToIndex(Vector2f coords_arg) const
     {
@@ -198,8 +219,10 @@ Int8 DotPositionRelativeToVector (Vector2f dotCoords_arg, Vector2f vectorStartCo
 }
 
 
+
 //данная функция меняет скорость и положение тела, но не нго габариты
-//возвращает true, если тело столкнулось с чем-либо снизу (т.е. приземлилось), false - если прошло свободно
+//возвращает true, если к концу работы под ногамии у тела есть опора, false - если таковой нет
+/*
 bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, Vector2f & bodySpeed_arg, Time time_arg)
 {
     const Vector2f origMoveVector(bodySpeed_arg* static_cast<float>(time_arg.asMicroseconds()) );
@@ -627,6 +650,363 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
     return grounded;
 }
 
+*/
+
+
+bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, Vector2f & bodySpeed_arg, Time time_arg)
+{
+
+    const Vector2f origMoveVector(bodySpeed_arg* static_cast<float>(time_arg.asMicroseconds()) );
+    Vector2f moveVector(bodySpeed_arg* static_cast<float>(time_arg.asMicroseconds()) );
+
+    if (bodySpeed_arg==Vector2f(0,0) || bodySpeed_arg == Vector2f(0,0))
+    {
+        return false;
+    }
+
+
+    static auto DotCrossesTheHorBoundary = [&map_arg, &moveVector] ( float xcoord ) ->bool
+        {
+            return map_arg.XCoordToIndex(xcoord) != map_arg.XCoordToIndex(xcoord+moveVector.x);
+        };
+    static auto DotCrossesTheVerBoundary = [&map_arg, &moveVector] ( float ycoord ) ->bool
+        {
+            return map_arg.YCoordToIndex(ycoord) != map_arg.YCoordToIndex(ycoord+moveVector.y);
+        };
+
+    bool crossedVerticalBoundary, crossedHorizontalBoundary;
+    {
+        float xcoord = moveVector.x>0? (body_arg.left+body_arg.width) : body_arg.left;
+        crossedHorizontalBoundary = DotCrossesTheHorBoundary(xcoord);
+        float ycoord = moveVector.y>0? (body_arg.top + body_arg.height) : body_arg.top;
+        crossedVerticalBoundary = DotCrossesTheVerBoundary(ycoord);
+    }
+    if (!(crossedHorizontalBoundary || crossedVerticalBoundary))
+    {
+        body_arg.top += moveVector.y;
+        body_arg.left+= moveVector.x;
+        return false;
+    }
+
+    if (moveVector.x > map_arg.tileSize || moveVector.y > map_arg.tileSize)
+    {
+        //если скорость слишком большая/тайлы маленькие - разбиваем движение на части и производим по частям
+        //нам же не нужно, чтобы тело на скорости пролетело сквозь тайлы?
+        bool grounded = false;
+
+        int stageCount = ceil( max( abs(moveVector.x) , abs(moveVector.y) )/ static_cast<float>(map_arg.tileSize));
+        for (int i = 0; i<stageCount; i++)
+        {
+            //вложенность рекурси - не обльше 1, т.к. я разбил движение на гарантированно достаточно малые куски
+            //другое дело, что этих кусков может быть много
+            if (MoveTroughtTilesAndCollide(map_arg, body_arg, bodySpeed_arg, time_arg/static_cast<Int64>(stageCount) ))
+                grounded=true;
+            if (bodySpeed_arg==Vector2f(0,0))
+                break;
+        }
+        return grounded;
+    }
+
+    bool collidedVertically = false, collidedHorizontally = false;
+
+    //не очень хорошо, с точки зрения читаемости, что функция, которая все завершает, находится в начале
+    static auto finish = [&]()mutable-> bool
+        {
+            bool grounded = false;
+            if (collidedHorizontally)
+            {
+                if(moveVector.x>0)
+                {
+                    float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex(body_arg.left+body_arg.width)+1 );
+                    moveVector.x = wallX*(1-epsiFraction) - (body_arg.left+body_arg.width) ;
+
+                    moveVector.y = minByAbs(moveVector.y, moveVector.y * (moveVector.y / origMoveVector.y)  );
+                }
+                else
+                {
+                    float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex(body_arg.left) );
+                    moveVector.x = wallX*(1+epsiFraction) - (body_arg.left);
+
+                    moveVector.y = minByAbs(moveVector.y, moveVector.y * (moveVector.y / origMoveVector.y)  );
+                }
+                bodySpeed_arg.x=0;
+            }
+            if (collidedVertically)
+            {
+                if (moveVector.y>0)
+                {
+                    grounded = true;
+                    float floorY =  map_arg.YIndexToCoord( map_arg.YCoordToIndex(body_arg.top+body_arg.height) + 1 );
+                    moveVector.y = floorY - (body_arg.top+body_arg.height);
+
+                    moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
+                }
+                else
+                {
+                    float ceilingY = map_arg.YCoordToIndex( map_arg.YIndexToCoord(body_arg.top));
+                    moveVector.y = ceilingY - body_arg.top;
+
+                    moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
+                }
+                bodySpeed_arg.y=0;
+            }
+            body_arg.left += moveVector.x;
+            body_arg.top  += moveVector.y;
+            return grounded;
+        };
+
+    //эти макросы будут вызываться, когда я обнаружу столкновение
+    //я не смог сделать все через лямбды, т.к. тут еще и возврат из функции при опр. условиях
+#define FINISH()  return finish();
+
+#define COLLIDE_VERT() \
+{                           \
+    collidedVertically=true;\
+    crossedVerticalBoundary = false;\
+    if (crossedHorizontalBoundary&&crossedVerticalBoundary)\
+    {\
+        FINISH()\
+    }\
+}
+
+#define COLLIDE_HOR()  \
+{       \
+    collidedHorizontally=true;\
+    crossedHorizontalBoundary = false;\
+    if (crossedHorizontalBoundary&&crossedVerticalBoundary)\
+    {\
+        FINISH()\
+    }\
+}
+
+    //обнаруживаем столкновения об угол углом коллизии
+    if(  (moveVector.x!=0) && (moveVector.y!=0) )
+    {
+        Vector2f upperMovingDot, lowerMovingDot;
+
+        bool movingRight = moveVector.x>0,
+                movingDown = moveVector.y>0;
+
+        CornerOfRect movingDirection;
+        if (movingRight)
+        {
+            if(movingDown)
+                movingDirection = CornerOfRect::RightDown;
+            else
+                movingDirection = CornerOfRect::RightUp;
+        }
+        else
+        {
+            if (movingDown)
+                movingDirection = CornerOfRect::LeftDown;
+            else
+                movingDirection = CornerOfRect::LeftUp;
+        }
+
+        //если бы я мог прилепить сюда бумажку со схемами, этот код был бы куда понятнее
+        if ( movingRight == movingDown )
+        {
+            upperMovingDot = getCornerCoords(body_arg, CornerOfRect::RightUp);
+            lowerMovingDot = getCornerCoords(body_arg, CornerOfRect::LeftDown);
+        }
+        else
+        {
+            upperMovingDot = getCornerCoords(body_arg, CornerOfRect::LeftUp);
+            lowerMovingDot = getCornerCoords(body_arg, CornerOfRect::RightDown);
+        }
+        //ищем удары лбом об углы
+        if( DotCrossesTheHorBoundary(upperMovingDot.x) && DotCrossesTheVerBoundary(upperMovingDot.y) )
+        {
+            Vector2f tileCorner = getCornerCoords( map_arg.getTileRectByIndex(map_arg.CoordsToIndex(upperMovingDot)), movingDirection);
+            Vector2u tileWeMovingTrought;
+
+            if (movingDown)
+                tileWeMovingTrought = map_arg.CoordsToIndex(tileCorner+moveVector) - Vector2u(0, 1);
+            else
+                tileWeMovingTrought = map_arg.CoordsToIndex(tileCorner) - Vector2u(0, 1);
+
+            if (map_arg.at(tileWeMovingTrought)!=nullptr && map_arg.at(tileWeMovingTrought)->solid_m
+                &&DotPositionRelativeToVector(tileCorner, upperMovingDot, moveVector)<0  )
+            {
+                if (movingDown)
+                {
+                    COLLIDE_HOR()
+                }
+                else
+                {
+                    COLLIDE_VERT()
+                }
+            }
+        }
+        //теперь ищем столкновения нижним углом
+        if( DotCrossesTheHorBoundary(lowerMovingDot.x) && DotCrossesTheVerBoundary(lowerMovingDot.y) )
+        {
+            Vector2f tileCorner = getCornerCoords( map_arg.getTileRectByIndex(map_arg.CoordsToIndex(lowerMovingDot)), movingDirection);
+            Vector2u tileWeMovingTrought;
+            if (movingDown)
+                tileWeMovingTrought = map_arg.CoordsToIndex(lowerMovingDot)+Vector2u(0, 1);
+            else
+                tileWeMovingTrought = map_arg.CoordsToIndex(lowerMovingDot+moveVector)+Vector2u(0,1);
+
+            if (map_arg.at(tileWeMovingTrought)!=nullptr && map_arg.at(tileWeMovingTrought)->solid_m
+                && DotPositionRelativeToVector(tileCorner, lowerMovingDot, moveVector)>0)
+            {
+                if (movingDown)
+                {
+                    COLLIDE_VERT()
+                }
+                else
+                {
+                    COLLIDE_HOR()
+                }
+            }
+        }
+    }//и-и-и, закончили искать столкновения углом
+    //теперь ищем прямые столкновения
+
+
+    //горизонтальные
+    if (crossedHorizontalBoundary)
+    {
+        float XcoordOfBody = (moveVector.x>0)? (body_arg.left+body_arg.width) : (body_arg.left);
+
+        Vector2u upperTile = map_arg.CoordsToIndex( Vector2f(XcoordOfBody+moveVector.x,
+                                                             (body_arg.top+moveVector.y))*(1+epsiFraction) );
+        Vector2u downTile  = map_arg.CoordsToIndex( Vector2f(XcoordOfBody+moveVector.x,
+                                                             (body_arg.top+body_arg.height+moveVector.y)*(1-epsiFraction) ));
+
+        if ( /*(moveVector.y<0) && */!DotCrossesTheVerBoundary( body_arg.top )
+            && map_arg.at(upperTile)!=nullptr && map_arg.at(upperTile)->solid_m )
+        {
+            COLLIDE_HOR()
+            goto EndHorizontalCollizionSearch;
+            //поскольку мы уже нашли горизонтадьную коллизию, ловить тут больше нечего
+        }
+        for (Uint16 i = upperTile.y+1; i<downTile.y; ++i)
+        {
+            if( map_arg.at(Vector2u(upperTile.x, i))!=nullptr && map_arg.at(Vector2u(upperTile.x, i))->solid_m )
+            {
+                COLLIDE_HOR()
+                goto EndHorizontalCollizionSearch;
+            }
+        }
+        if(/*moveVector.y>0 && */!DotCrossesTheHorBoundary(body_arg.top+body_arg.height)
+           && map_arg.at(downTile)!=nullptr && map_arg.at(downTile)->solid_m)
+        {
+            COLLIDE_HOR()
+            goto EndHorizontalCollizionSearch;
+        }
+
+    }
+    EndHorizontalCollizionSearch:
+
+    //теперь все то же самое, но мы ищем прямые вертикальные коллизии
+    if(crossedVerticalBoundary)
+    {
+        float ycoordOfBody = moveVector.y>0? (body_arg.top+body_arg.height) : (body_arg.top);
+
+        Vector2u leftTile  = map_arg.CoordsToIndex( (body_arg.left+moveVector.x)*(1+epsiFraction),
+                                                   ycoordOfBody+moveVector.y );
+        Vector2u rightTile = map_arg.CoordsToIndex( (body_arg.left+body_arg.width+moveVector.x)*(1-epsiFraction),
+                                                   ycoordOfBody+moveVector.y );
+
+        if (/*moveVector.x<0 &&*/ !DotCrossesTheHorBoundary(body_arg.left) &&
+            map_arg.at(leftTile)!=nullptr && map_arg.at(leftTile)->solid_m)
+        {
+            //COLLIDE_VERT()
+            {
+                collidedVertically=true;
+                crossedVerticalBoundary = false;
+                if (crossedHorizontalBoundary&&crossedVerticalBoundary)
+                {
+                    FINISH()
+                }
+            }
+            goto EndVerticalCollizionSearch;
+        }
+        for (Uint16 i = leftTile.x+1; i<rightTile.x; ++i)
+        {
+            if (map_arg.at(i, leftTile.y)!=nullptr && map_arg.at(i, leftTile.y)->solid_m)
+            {
+                //COLLIDE_VERT()
+                {
+                    collidedVertically=true;
+                    crossedVerticalBoundary = false;
+                    if (crossedHorizontalBoundary&&crossedVerticalBoundary)
+                    {
+                        FINISH()
+                    }
+                }
+
+                goto EndVerticalCollizionSearch;
+            }
+        }
+        if ( (leftTile.x!=rightTile.x)/* && moveVector.x>0*/ && !DotCrossesTheHorBoundary(body_arg.left+body_arg.width)
+            &&map_arg.at(rightTile)!=nullptr && map_arg.at(rightTile)->solid_m )
+        {
+            //COLLIDE_VERT()
+            {
+                collidedVertically=true;
+                crossedVerticalBoundary = false;
+                if (crossedHorizontalBoundary&&crossedVerticalBoundary)
+                {
+                    FINISH()
+                }
+            }
+            goto EndVerticalCollizionSearch;
+        }
+
+    }
+    EndVerticalCollizionSearch:
+
+    //теперь обрабатываем "прыжки на угол"
+    if (!(collidedHorizontally||collidedVertically)
+        &&moveVector.x!=0 && moveVector.y!=0 )
+    {
+        CornerOfRect movingDirection;
+        if (moveVector.x>0)
+        {
+            if(moveVector.y>0)
+                movingDirection = CornerOfRect::RightDown;
+            else
+                movingDirection = CornerOfRect::RightUp;
+        }
+        else
+        {
+            if (moveVector.y>0)
+                movingDirection = CornerOfRect::LeftDown;
+            else
+                movingDirection = CornerOfRect::LeftUp;
+        }
+        Vector2f movingBodyCorner = getCornerCoords(body_arg, movingDirection);
+
+
+        Vector2u tileIndex = map_arg.CoordsToIndex(movingBodyCorner+moveVector);
+
+        if(map_arg.at(tileIndex)!=nullptr && map_arg.at(tileIndex)->solid_m)
+        {
+
+            Vector2f tileCorner = getCornerCoords(map_arg.getTileRectByIndex(tileIndex), OppositeRectCorner(movingDirection) );
+
+            if( (DotPositionRelativeToVector(tileCorner, movingBodyCorner, moveVector)>0)
+                    == (moveVector.y>0) )
+            {
+                COLLIDE_HOR()
+            }
+            else
+            {
+                COLLIDE_VERT()
+            }
+        }
+    }
+
+    FINISH()
+
+#undef COLLIDE_HOR
+#undef COLLIDE_VERT
+#undef FINISH
+}
+
 class PlayableCharacter : public Entity
 {
 public:
@@ -675,23 +1055,28 @@ public:
     {
         readApplyUserInput();
 
+        /*
+        static vector<Uint32> frameTimes(400);
+        static vector<Uint32>::iterator currentIter = frameTimes.begin();
+        ++currentIter;
+        *currentIter = frameTime_arg.asMicroseconds();
+        if (currentIter==frameTimes.end())
+        {
+            currentIter=frameTimes.begin();
+            cout << "mics: "<< ( accumulate(frameTimes.begin(), frameTimes.end(), 0) / 400)  << endl;
+        }
+
         currentAnimFrame_m+=animSpeed_m*frameTime_arg.asMicroseconds();
-
-        //поиск сначала горизонтальных а потом вертикальных коллизий - тупик
-
-        //сначала двигаем - потом проверям на коллизию, потом отодвигаем назад
-        //если есть коллизия сбоку - сбрасываем горизонтальную скорость
-        //снизу - вертикальную, и "ставим", сверху - сбрасываем скорость
-        //по диагонали - вот вообще без малейшего понятия
-        //а нет погодите-ка, да это же легко! немного аналитической геометрии
-        //там надо посмотреть соотношение составляющих векторов: соединяющего угол
-        //спрайта с углом тайла и вектора скорости
-
+        */
 
 
         //apply state-specific things
         if (state_m == State_m::standing)
             speed_m.x = 0;
+
+        //двигаемся сквозь тайловую карту
+        if (MoveTroughtTilesAndCollide(*locationMap_m, *collizion_m, speed_m, frameTime_arg))
+            state_m=State_m::standing;
 
         collizion_m->top += speed_m.y * frameTime_arg.asMicroseconds();
 
@@ -765,7 +1150,7 @@ public:
     Vector2f speed_m        = Vector2f(0,0);
 
     //скорость - в пикселях в микросекунду
-    float jumpingSpeed_m        = 0.0018; //вертикальная скорость, которая ему придается при прыжке
+    float jumpingSpeed_m        = 0.0012; //вертикальная скорость, которая ему придается при прыжке
     float walkingSpeed_m        = 0.0006;  //скорость, с которой он ходит
     float animSpeed_m           = 0.00001; // смен кадров в микросекунду
     sf::FloatRect* collizion_m  = nullptr;
@@ -778,6 +1163,59 @@ public:
 
 int main()
 {
+    //tiles
+    Tile stone;
+    stone.solid_m = true;
+    sf::RectangleShape stoneTileShape(Vector2f(100, 100));
+    stoneTileShape.setFillColor(sf::Color( 200, 200, 200));
+    stone.drawableComponent = &stoneTileShape;
+
+    //levelMap
+    //Tile* levelTiles[levelWidth][levelHight];
+    Tileset2d levelTiles(24,11);
+    {
+        constexpr char const* levelCheme[] =
+        {
+            "s                      s",
+            "                       s",
+            "ssssssssssssssssssssssss",
+            "s                      s",
+            "s   sssss              s",
+            "s                      s",
+            "s         sssss        s",
+            "s             s        s",
+            "s             s        s",
+            "s             s        s",
+            "ssss   sssssssssssssssss"
+        };
+
+        for (int x=0; x<levelTiles.getWidth(); ++x)
+            for (int y=0; y<levelTiles.getHeight(); ++y)
+        {
+            switch (levelCheme[y][x])
+            {
+            case 's':
+                levelTiles.at(x, y) = &stone;
+                break;
+            default:
+                break;
+            }
+        }
+    }
+
+    FloatRect fr (170, 900-0.0003, 80, 100);
+
+    Vector2f speed (0, 0.0005);
+    Time time = microseconds(1);
+    while (true)
+    {
+        ;
+        MoveTroughtTilesAndCollide(levelTiles, fr, speed, time);
+    }
+}
+
+int main_fun()
+{
 
     //tiles
     Tile stone;
@@ -788,13 +1226,13 @@ int main()
 
     //levelMap
     //Tile* levelTiles[levelWidth][levelHight];
-    Tileset2d levelTiles(38-14,11);
+    Tileset2d levelTiles(24,11);
     {
-        char * levelCheme[] =
+        constexpr char const* levelCheme[] =
         {
-            "ssssssssssssssssssssssss",
             "s                      s",
             "s                      s",
+            "s   ssssssssssssssssssss",
             "s                      s",
             "s   sssss              s",
             "s                      s",
@@ -826,9 +1264,11 @@ int main()
     sprt.setTexture(myTxtr);
     sprt.setTextureRect( IntRect(0, 244, 40, 50) );
     sprt.setScale(2,2);
-    sprt.setPosition(30, 40);
+    sprt.setPosition(100, 100);
     FloatRect FangCollizion = sprt.getGlobalBounds();
     PlayableCharacter Fang(&FangCollizion ,&sprt);
+    Fang.locationMap_m = &levelTiles;
+    Fang.state_m = PlayableCharacter::State_m::inAir;
     //level content
     vector<Entity*> entitiesOnLevel;
     entitiesOnLevel.push_back(&Fang);
@@ -857,6 +1297,10 @@ int main()
         {
             if (event.type == sf::Event::Closed)
                 window.close();
+            if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Return)
+            {
+                cout << "\nx = "<< Fang.collizion_m->left << " y = " << Fang.collizion_m->top;
+            }
         }
 
 
