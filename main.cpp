@@ -26,6 +26,17 @@ constexpr float epsiFraction = numeric_limits<float>::epsilon()*2;
 //из этого квадрата можно получить 4 вектора epsi-длины напр. в разные стороны при помощи ф-ии getCornerOfSquare
 const FloatRect epsiQuad(-epsiFraction, -epsiFraction, 2*epsiFraction, 2*epsiFraction);
 
+inline float LittleLessThat (float arg)
+{
+    return arg - abs(arg)*epsiFraction;
+}
+inline float LittleMoreThat (float arg)
+{
+    return arg + abs(arg)*epsiFraction;
+}
+
+
+constexpr float gravityAcceleration = 4*0.98;
 template<typename T>
 T minByAbs(T arg1, T arg2 )
 {
@@ -152,7 +163,7 @@ public:
     }
     Tile* const & at (Uint16 x_arg, Uint16 y_arg) const
     {
-        if (x_arg<width_m && x_arg>=0 && y_arg<height_m && y_arg>=0)
+        if (x_arg<width_m /*&& x_arg>=0*/ && y_arg<height_m /*&& y_arg>=0*/)
             return content_m[y_arg*width_m + x_arg];
         else
             return nullptr;
@@ -235,12 +246,10 @@ Int8 DotPositionRelativeToVector (Vector2f dotCoords_arg, Vector2f vectorStartCo
     return 0;
 }
 
-
+//#define LOGGING_ENABLED
 
 //данная функция меняет скорость и положение тела, но не его габариты
 //возвращает true, если к концу работы под ногамии у тела есть опора, false - если таковой нет
-
-
 
 bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, Vector2f & bodySpeed_arg, Time time_arg)
 {
@@ -264,7 +273,7 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
 
     static int left=10;
 
-    if (body_arg.left>1320)
+    if (body_arg.top>900)
     {
         --left;
         if (left==0)
@@ -299,18 +308,21 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
 #endif // LOGGING_ENABLED
 
 
-    if (bodySpeed_arg==Vector2f(0,0) || bodySpeed_arg == Vector2f(0,0))
+    if (moveVector.x == 0  && (abs(moveVector.y) <= epsiFraction*abs(moveVector.y)))
     {
         //определим наличия опоры под ногами
         bool thereIsFooting = false;
         {
-            Vector2f dot = getCornerCoords(body_arg, CornerOfRect::LeftDown)-Vector2f(epsiFraction, 2*epsiFraction);
 
+            Vector2f dot = getCornerCoords(body_arg, CornerOfRect::LeftDown);
+            dot +=  abs(dot)*Vector2f(epsiFraction, 2*epsiFraction);
             Vector2u leftTile = map_arg.CoordsToIndex(dot);
-            dot = getCornerCoords(body_arg, CornerOfRect::RightDown) - Vector2f(-epsiFraction, 2*epsiFraction);
+
+            dot = getCornerCoords(body_arg, CornerOfRect::RightDown) + Vector2f(-epsiFraction, 2*epsiFraction);
+            dot += abs(dot)*Vector2f(-epsiFraction, 2*epsiFraction);
             Uint16 rightTileX = map_arg.CoordsToIndex(dot).x;
 
-            for (int x = leftTile.x; x<rightTileX; x++)
+            for (int x = leftTile.x; x<=rightTileX; x++)
             {
                 if (map_arg.at(x, leftTile.y)!=nullptr && map_arg.at(x, leftTile.y)->solid_m )
                 {
@@ -399,15 +411,15 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
             {
                 if(moveVector.x>0)
                 {
-                    float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex(body_arg.left+body_arg.width)+1 );
-                    moveVector.x = wallX*(1-epsiFraction) - (body_arg.left+body_arg.width) ;
+                    float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex( LittleLessThat(body_arg.left+body_arg.width) ) +1 );
+                    moveVector.x = LittleLessThat(wallX) - (body_arg.left+body_arg.width) ;
 
                     moveVector.y = minByAbs(moveVector.y, moveVector.y * (moveVector.y / origMoveVector.y)  );
                 }
                 else
                 {
-                    float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex(body_arg.left) );
-                    moveVector.x = wallX*(1+epsiFraction) - (body_arg.left);
+                    float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex( LittleMoreThat(body_arg.left) ) );
+                    moveVector.x = LittleMoreThat(wallX) - (body_arg.left);
 
                     moveVector.y = minByAbs(moveVector.y, moveVector.y * (moveVector.y / origMoveVector.y)  );
                 }
@@ -418,30 +430,32 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
                 if (moveVector.y>0)
                 {
                     grounded = true;
-                    float floorY =  map_arg.YIndexToCoord( map_arg.YCoordToIndex(body_arg.top+body_arg.height) + 1 );
-                    moveVector.y = floorY*(1-epsiFraction) - (body_arg.top+body_arg.height);
+                    float floorY =  map_arg.YIndexToCoord( map_arg.YCoordToIndex( LittleLessThat(body_arg.top+body_arg.height) ) + 1 );
+                    moveVector.y = LittleLessThat(floorY) - (body_arg.top+body_arg.height);
 
                     moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
                 }
                 else
                 {
-                    float ceilingY = map_arg.YCoordToIndex( map_arg.YIndexToCoord(body_arg.top));
-                    moveVector.y = ceilingY*(1+epsiFraction) - body_arg.top;
+                    float ceilingY = map_arg.YCoordToIndex( map_arg.YIndexToCoord(LittleMoreThat(body_arg.top) ));
+                    moveVector.y = LittleMoreThat(ceilingY) - body_arg.top;
 
                     moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
                 }
                 bodySpeed_arg.y=0;
             }
             //проверяем, стоит ли тело на земле
-            if ( moveVector.y==0 )
+            if ( abs(moveVector.y) <= epsiFraction*abs(moveVector.y) )
             {
-                Vector2f dot = getCornerCoords(body_arg, CornerOfRect::LeftDown)-Vector2f(epsiFraction, 2*epsiFraction);
-
+                Vector2f dot = getCornerCoords(body_arg, CornerOfRect::LeftDown);
+                dot +=  abs(dot)*Vector2f(epsiFraction, 2*epsiFraction);
                 Vector2u leftTile = map_arg.CoordsToIndex(dot);
-                dot = getCornerCoords(body_arg, CornerOfRect::RightDown) - Vector2f(-epsiFraction, 2*epsiFraction);
+
+                dot = getCornerCoords(body_arg, CornerOfRect::RightDown) + Vector2f(-epsiFraction, 2*epsiFraction);
+                dot += abs(dot)*Vector2f(-epsiFraction, 2*epsiFraction);
                 Uint16 rightTileX = map_arg.CoordsToIndex(dot).x;
 
-                for (int x = leftTile.x; x<rightTileX; x++)
+                for (int x = leftTile.x; x<=rightTileX; x++)
                 {
                     if (map_arg.at(x, leftTile.y)!=nullptr && map_arg.at(x, leftTile.y)->solid_m )
                     {
@@ -449,7 +463,7 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
                         break;
                     }
                 }
-            }//мы же хотим чтобы он падал, когда шагаел с уступа?
+            }//мы же хотим чтобы он падал, когда шагал с уступа/земля под ногами пропадала?
 
             body_arg.left += moveVector.x;
             body_arg.top  += moveVector.y;
@@ -806,17 +820,33 @@ public:
         //apply state-specific things
         if (state_m == State_m::standing)
             speed_m.x = 0;
-
-        //двигаемся сквозь тайловую карту
-        if (MoveTroughtTilesAndCollide(*locationMap_m, *collizion_m, speed_m, frameTime_arg))
-            state_m=State_m::standing;
-
+        /*
+        if (state_m!-inAir)
+            speed_m.y=0;
+*/
         if (state_m == State_m::inAir)
         {
-            speed_m.y+= 9.8/(10000000);
+            speed_m.y += frameTime_arg.asMicroseconds()* gravityAcceleration/(1000000000);
         }
 
 
+        //двигаемся сквозь тайловую карту
+        bool onGround = MoveTroughtTilesAndCollide(*locationMap_m, *collizion_m, speed_m, frameTime_arg);
+
+        if (onGround && state_m==State_m::inAir)
+        {
+            if (speed_m.x!=0)
+                state_m = State_m::walking;
+            else
+                state_m = State_m::standing;
+        }
+        if (!onGround && state_m!=State_m::inAir)
+        {
+            state_m = State_m::inAir;
+        }
+
+
+        //глобальный пол
         if( (collizion_m->top + collizion_m->height)  > floorLevel)
         {
             collizion_m->top = floorLevel-collizion_m->height;
