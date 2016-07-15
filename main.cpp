@@ -26,13 +26,13 @@ constexpr float epsiFraction = numeric_limits<float>::epsilon()*2;
 //из этого квадрата можно получить 4 вектора epsi-длины напр. в разные стороны при помощи ф-ии getCornerOfSquare
 const FloatRect epsiQuad(-epsiFraction, -epsiFraction, 2*epsiFraction, 2*epsiFraction);
 
-inline float LittleLessThat (float arg)
+inline float LittleLessThat (float const arg, int mul_arg = 1)
 {
-    return arg - abs(arg)*epsiFraction;
+    return arg - abs(arg)*epsiFraction*mul_arg;
 }
-inline float LittleMoreThat (float arg)
+inline float LittleMoreThat (float const arg, int mul_arg = 1)
 {
-    return arg + abs(arg)*epsiFraction;
+    return arg + abs(arg)*epsiFraction*mul_arg;
 }
 
 
@@ -246,7 +246,8 @@ Int8 DotPositionRelativeToVector (Vector2f dotCoords_arg, Vector2f vectorStartCo
     return 0;
 }
 
-//#define LOGGING_ENABLED
+//
+#define LOGGING_ENABLED
 
 //данная функция меняет скорость и положение тела, но не его габариты
 //возвращает true, если к концу работы под ногамии у тела есть опора, false - если таковой нет
@@ -273,7 +274,7 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
 
     static int left=10;
 
-    if (body_arg.top>900)
+    if (body_arg.left>2220)
     {
         --left;
         if (left==0)
@@ -281,7 +282,7 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
             cout << "\n\n\n\n\nNumber is " << num <<endl;
 
             tuple<FloatRect, Vector2f, Time> & current = log[num];
-            cout << 0<< ")top: "<< get<0>(current).top << " left: " << get<0>(current).left;
+            cout << -20<< ")top: "<< get<0>(current).top << " left: " << get<0>(current).left;
             cout << "\n   speed: (" << get<1>(current).x <<", "
                                 << get<1>(current).y << ")";
             cout << "\n   time = " << get<2>(current).asMicroseconds();
@@ -291,7 +292,7 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
             for (unsigned i = num+1; i!=num; i = (i+1)%30)
             {
                 tuple<FloatRect, Vector2f, Time> & current = log[i];
-                cout << int( ( int(i) - int(num) )>0? ( int(i)- int(num)%30) : (30+(i- int(num)%30))  ) -10
+                cout << int( ( int(i) - int(num) )>0? ( int(i)- int(num)%30) : (30+(i- int(num)%30))  ) -20
                         << ")top: "<< get<0>(current).top << " left: " << get<0>(current).left;
                 cout << "\n   speed: (" << get<1>(current).x <<", "
                                 << get<1>(current).y << ")";
@@ -308,7 +309,7 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
 #endif // LOGGING_ENABLED
 
 
-    if (moveVector.x == 0  && (abs(moveVector.y) <= epsiFraction*abs(moveVector.y)))
+    if ((moveVector.x == 0)  && (abs(moveVector.y) <= epsiFraction*abs(moveVector.y)))
     {
         //определим наличия опоры под ногами
         bool thereIsFooting = false;
@@ -350,13 +351,13 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
         float xcoord;
         if (moveVector.x>0)
         {
-           xcoord = (body_arg.left+body_arg.width - abs(body_arg.left+body_arg.width)*epsiFraction );
-           crossedHorizontalBoundary = DotCrossesTheHorBoundary(xcoord, moveVector.x + abs(body_arg.left+body_arg.width)*epsiFraction );
+           xcoord = (body_arg.left+body_arg.width - abs(body_arg.left+body_arg.width)*epsiFraction*2 );
+           crossedHorizontalBoundary = DotCrossesTheHorBoundary(xcoord, moveVector.x*(1+epsiFraction) + abs(body_arg.left+body_arg.width)*epsiFraction );
         }
         else if(moveVector.x!=0)
         {
-            xcoord = (body_arg.left + abs(body_arg.left)*epsiFraction );
-            crossedHorizontalBoundary = DotCrossesTheHorBoundary(xcoord, moveVector.x-abs(body_arg.left)*epsiFraction);
+            xcoord = (body_arg.left + abs(body_arg.left)*epsiFraction*2 );
+            crossedHorizontalBoundary = DotCrossesTheHorBoundary(xcoord, moveVector.x*(1+epsiFraction) - abs(body_arg.left)*epsiFraction);
         }
         else
             crossedHorizontalBoundary = false;
@@ -364,13 +365,13 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
         float ycoord;
         if (moveVector.y >0)
         {
-            ycoord = (body_arg.top + body_arg.height) - abs(body_arg.top + body_arg.height)*epsiFraction;
-            crossedVerticalBoundary = DotCrossesTheVerBoundary(ycoord, moveVector.y + abs(body_arg.top + body_arg.height)*epsiFraction);
+            ycoord = (body_arg.top + body_arg.height) - abs(body_arg.top + body_arg.height)*epsiFraction*2;
+            crossedVerticalBoundary = DotCrossesTheVerBoundary(ycoord, moveVector.y*(1+epsiFraction) + abs(body_arg.top + body_arg.height)*epsiFraction*2);
         }
         else if (moveVector.y!=0)
         {
-            ycoord = body_arg.top + abs(body_arg.top)*epsiFraction;
-            crossedVerticalBoundary = DotCrossesTheVerBoundary(ycoord, moveVector.y - abs(body_arg.top)*epsiFraction);
+            ycoord = body_arg.top + abs(body_arg.top)*epsiFraction*2;
+            crossedVerticalBoundary = DotCrossesTheVerBoundary(ycoord, moveVector.y*(1+epsiFraction) - abs(body_arg.top)*epsiFraction*2);
         }
         else
             crossedVerticalBoundary = false;
@@ -411,15 +412,15 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
             {
                 if(moveVector.x>0)
                 {
-                    float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex( LittleLessThat(body_arg.left+body_arg.width) ) +1 );
-                    moveVector.x = LittleLessThat(wallX) - (body_arg.left+body_arg.width) ;
+                    float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex( LittleLessThat(body_arg.left+body_arg.width,2) ) +1 );
+                    moveVector.x = wallX - LittleMoreThat(body_arg.left+body_arg.width) ;
 
                     moveVector.y = minByAbs(moveVector.y, moveVector.y * (moveVector.y / origMoveVector.y)  );
                 }
                 else
                 {
                     float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex( LittleMoreThat(body_arg.left) ) );
-                    moveVector.x = LittleMoreThat(wallX) - (body_arg.left);
+                    moveVector.x = wallX - LittleLessThat(body_arg.left);
 
                     moveVector.y = minByAbs(moveVector.y, moveVector.y * (moveVector.y / origMoveVector.y)  );
                 }
@@ -430,15 +431,15 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
                 if (moveVector.y>0)
                 {
                     grounded = true;
-                    float floorY =  map_arg.YIndexToCoord( map_arg.YCoordToIndex( LittleLessThat(body_arg.top+body_arg.height) ) + 1 );
-                    moveVector.y = LittleLessThat(floorY) - (body_arg.top+body_arg.height);
+                    float floorY =  map_arg.YIndexToCoord( map_arg.YCoordToIndex( LittleLessThat(body_arg.top+body_arg.height,2)) + 1 );
+                    moveVector.y = (floorY) - LittleMoreThat(body_arg.top+body_arg.height);
 
                     moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
                 }
                 else
                 {
-                    float ceilingY = map_arg.YCoordToIndex( map_arg.YIndexToCoord(LittleMoreThat(body_arg.top) ));
-                    moveVector.y = LittleMoreThat(ceilingY) - body_arg.top;
+                    float ceilingY = map_arg.YCoordToIndex( map_arg.YIndexToCoord(LittleMoreThat(body_arg.top,2) ));
+                    moveVector.y = ceilingY - LittleMoreThat(body_arg.top);
 
                     moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
                 }
@@ -603,15 +604,13 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
     {
         float XcoordOfBody = (moveVector.x>0)? (body_arg.left+body_arg.width) : (body_arg.left);
 
-        Vector2u upperTile = map_arg.CoordsToIndex( Vector2f(XcoordOfBody+moveVector.x,
-                                                             body_arg.top+moveVector.y
-                                                             +abs(body_arg.top+moveVector.y)*epsiFraction ) );
+        Vector2u upperTile = map_arg.CoordsToIndex( Vector2f(XcoordOfBody+moveVector.x, LittleMoreThat(body_arg.top+moveVector.y) ) );
 
-        Vector2u downTile  = map_arg.CoordsToIndex( Vector2f(XcoordOfBody+moveVector.x,
-                                                             (body_arg.top+body_arg.height+moveVector.y)
-                                                              -abs(body_arg.top+body_arg.height+moveVector.y)*epsiFraction ));
+        Vector2u downTile  = map_arg.CoordsToIndex( Vector2f(XcoordOfBody+moveVector.x
+                                                             ,LittleLessThat(body_arg.top+body_arg.height+moveVector.y) ));
 
-        if ( !DotCrossesTheVerBoundary( body_arg.top+abs(body_arg.top)*epsiFraction, moveVector.y-abs(body_arg.top)*epsiFraction )
+        if ( !(DotCrossesTheVerBoundary( body_arg.top+abs(body_arg.top)*epsiFraction, moveVector.y-abs(body_arg.top)*epsiFraction )
+               &&moveVector.y<0 )
             && map_arg.at(upperTile)!=nullptr && map_arg.at(upperTile)->solid_m )
         {
             COLLIDE_HOR()
@@ -626,8 +625,9 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
                 goto EndHorizontalCollizionSearch;
             }
         }
-        if(!DotCrossesTheVerBoundary( body_arg.top+body_arg.height - abs(body_arg.top+body_arg.height)*epsiFraction,
-                                                      moveVector.y + abs(body_arg.top+body_arg.height)*epsiFraction )
+        if(!(DotCrossesTheVerBoundary( body_arg.top+body_arg.height - abs(body_arg.top+body_arg.height)*epsiFraction
+                                     ,moveVector.y + abs(body_arg.top+body_arg.height)*epsiFraction )
+             && moveVector.y >0  )
            && map_arg.at(downTile)!=nullptr && map_arg.at(downTile)->solid_m)
         {
             COLLIDE_HOR()
@@ -643,61 +643,33 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
     {
         float ycoordOfBody = moveVector.y>0? (body_arg.top+body_arg.height) : (body_arg.top);
 
-        Vector2u leftTile  = map_arg.CoordsToIndex( (body_arg.left+moveVector.x)
-                                                                +abs(body_arg.left+moveVector.x)*epsiFraction
-                                                   ,ycoordOfBody+moveVector.y );
-        Vector2u rightTile = map_arg.CoordsToIndex( (body_arg.left+body_arg.width+moveVector.x)
-                                                                -abs(body_arg.left+body_arg.width+moveVector.x)*epsiFraction
+        Vector2u leftTile  = map_arg.CoordsToIndex( LittleMoreThat(body_arg.left+moveVector.x),ycoordOfBody+moveVector.y );
+        Vector2u rightTile = map_arg.CoordsToIndex( LittleLessThat(body_arg.left+body_arg.width+moveVector.x)
                                                    ,ycoordOfBody+moveVector.y );
 
         // если верхний/нижний блок находится выше персонажа, то это дело других частей - тех что ищут
         // "прыжки на углы" и "удары углом"
-        if (!DotCrossesTheHorBoundary(body_arg.left+abs(body_arg.left)*epsiFraction, moveVector.x-abs(body_arg.left)*epsiFraction )
+        if (!(DotCrossesTheHorBoundary(body_arg.left+abs(body_arg.left)*epsiFraction, moveVector.x-abs(body_arg.left)*epsiFraction )
+              && moveVector.x<0 )
             && map_arg.at(leftTile)!=nullptr && map_arg.at(leftTile)->solid_m)
         {
-            //COLLIDE_VERT()
-            {
-                collidedVertically=true;
-                crossedVerticalBoundary = false;
-                if (crossedHorizontalBoundary&&crossedVerticalBoundary)
-                {
-                    FINISH()
-                }
-            }
+            COLLIDE_VERT()
             goto EndVerticalCollizionSearch;
         }
         for (Uint16 i = leftTile.x+1; i<rightTile.x; ++i)
         {
             if (map_arg.at(i, leftTile.y)!=nullptr && map_arg.at(i, leftTile.y)->solid_m)
             {
-                //COLLIDE_VERT()
-                {
-                    collidedVertically=true;
-                    crossedVerticalBoundary = false;
-                    if (crossedHorizontalBoundary&&crossedVerticalBoundary)
-                    {
-                        FINISH()
-                    }
-                }
-
+                COLLIDE_VERT()
                 goto EndVerticalCollizionSearch;
             }
         }
-        if ( (leftTile.x!=rightTile.x)
-            && !DotCrossesTheHorBoundary(body_arg.left+body_arg.width-abs(body_arg.left+body_arg.width)*epsiFraction,
-                                            moveVector.x+abs(body_arg.left+body_arg.width)*epsiFraction)
+        if ( !(DotCrossesTheHorBoundary(body_arg.left+body_arg.width-abs(body_arg.left+body_arg.width)*epsiFraction
+                                        ,moveVector.x+abs(body_arg.left+body_arg.width)*epsiFraction)
+                 &&moveVector.x>0)
             &&map_arg.at(rightTile)!=nullptr && map_arg.at(rightTile)->solid_m )
         {
-            //COLLIDE_VERT()
-            {
-                collidedVertically=true;
-                crossedVerticalBoundary = false;
-                if (crossedHorizontalBoundary&&crossedVerticalBoundary)
-                {
-                    FINISH()
-                }
-            }
-            goto EndVerticalCollizionSearch;
+            COLLIDE_VERT()
         }
 
     }
@@ -820,8 +792,8 @@ public:
         //apply state-specific things
         if (state_m == State_m::standing)
             speed_m.x = 0;
-        /*
-        if (state_m!-inAir)
+/*
+        if (state_m!=inAir)
             speed_m.y=0;
 */
         if (state_m == State_m::inAir)
@@ -933,21 +905,22 @@ int main_()
 
     //levelMap
     //Tile* levelTiles[levelWidth][levelHight];
+
     Tileset2d levelTiles(24,11);
     {
         constexpr char const* levelCheme[] =
         {
             "s                      s",
-            "                       s",
-            "ssssssssssssssssssssssss",
+            "s                      s",
+            "s   ssssssssssssssssssss",
             "s                      s",
             "s   sssss              s",
             "s                      s",
             "s         sssss        s",
             "s             s        s",
+            "s          ssss        s",
             "s             s        s",
-            "s             s        s",
-            "ssss   sssssssssssssssss"
+            "ssss sssssssssssssssssss"
         };
 
         for (int x=0; x<levelTiles.getWidth(); ++x)
@@ -964,14 +937,15 @@ int main_()
         }
     }
 
-    FloatRect fr (1320, 900, 80, 100);
+    FloatRect fr (2220, 300.05, 80, 100);
 
-    Vector2f speed (0.001, -0.002);
-    Time time = microseconds(574);
+    Vector2f speed (0.001, -0.00199897  );
+    Time time = microseconds(264);
     while (true)
     {
         ;
         MoveTroughtTilesAndCollide(levelTiles, fr, speed, time);
+        cout << "f";
     }
 }
 
@@ -1001,7 +975,7 @@ int main()
             "s             s        s",
             "s          ssss        s",
             "s             s        s",
-            "ssss   sssssssssssssssss"
+            "ssss sssssssssssssssssss"
         };
 
         for (int x=0; x<levelTiles.getWidth(); ++x)
@@ -1025,7 +999,7 @@ int main()
     sprt.setTexture(myTxtr);
     sprt.setTextureRect( IntRect(0, 244, 40, 50) );
     sprt.setScale(2,2);
-    sprt.setPosition(100, 100);
+    sprt.setPosition(-300, 100);
     FloatRect FangCollizion = sprt.getGlobalBounds();
     PlayableCharacter Fang(&FangCollizion ,&sprt);
     Fang.locationMap_m = &levelTiles;
