@@ -237,7 +237,7 @@ Int8 DotPositionRelativeToVector (Vector2f dotCoords_arg, Vector2f vectorStartCo
 
 
 
-//данная функция меняет скорость и положение тела, но не нго габариты
+//данная функция меняет скорость и положение тела, но не его габариты
 //возвращает true, если к концу работы под ногамии у тела есть опора, false - если таковой нет
 
 
@@ -247,6 +247,12 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
 
     const Vector2f origMoveVector(bodySpeed_arg.x * time_arg.asMicroseconds(), bodySpeed_arg.y * time_arg.asMicroseconds() );
         Vector2f moveVector(bodySpeed_arg.x * time_arg.asMicroseconds(), bodySpeed_arg.y * time_arg.asMicroseconds());
+
+        //использовалось для отслеживания багов с провалом сквозь землю и прохождением сквозь стены
+        //зная аргументты я мог позже воспроизвести его и посмотреть выполнение пошагово
+        //дело в том, что отладка во время самой игры затруднена из-за того, что часы продолжают идти, да прокликивать
+        //f8 300 раз, чтобы добраться до того места, где баг воспроизводится... Проще поймать состояние логгером
+        //и потом воспроизводить в тесте
 #ifdef LOGGING_ENABLED
 {
     static vector<tuple<FloatRect, Vector2f, Time>> log(30);
@@ -295,7 +301,25 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
 
     if (bodySpeed_arg==Vector2f(0,0) || bodySpeed_arg == Vector2f(0,0))
     {
-        return false;
+        //определим наличия опоры под ногами
+        bool thereIsFooting = false;
+        {
+            Vector2f dot = getCornerCoords(body_arg, CornerOfRect::LeftDown)-Vector2f(epsiFraction, 2*epsiFraction);
+
+            Vector2u leftTile = map_arg.CoordsToIndex(dot);
+            dot = getCornerCoords(body_arg, CornerOfRect::RightDown) - Vector2f(-epsiFraction, 2*epsiFraction);
+            Uint16 rightTileX = map_arg.CoordsToIndex(dot).x;
+
+            for (int x = leftTile.x; x<rightTileX; x++)
+            {
+                if (map_arg.at(x, leftTile.y)!=nullptr && map_arg.at(x, leftTile.y)->solid_m )
+                {
+                    thereIsFooting = true;
+                    break;
+                }
+            }
+        }
+        return thereIsFooting;
     }
 
     static auto DotCrossesTheHorBoundary = [&map_arg] ( float xcoord, float xShift  ) -> bool
@@ -408,6 +432,25 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
                 }
                 bodySpeed_arg.y=0;
             }
+            //проверяем, стоит ли тело на земле
+            if ( moveVector.y==0 )
+            {
+                Vector2f dot = getCornerCoords(body_arg, CornerOfRect::LeftDown)-Vector2f(epsiFraction, 2*epsiFraction);
+
+                Vector2u leftTile = map_arg.CoordsToIndex(dot);
+                dot = getCornerCoords(body_arg, CornerOfRect::RightDown) - Vector2f(-epsiFraction, 2*epsiFraction);
+                Uint16 rightTileX = map_arg.CoordsToIndex(dot).x;
+
+                for (int x = leftTile.x; x<rightTileX; x++)
+                {
+                    if (map_arg.at(x, leftTile.y)!=nullptr && map_arg.at(x, leftTile.y)->solid_m )
+                    {
+                        grounded = true;
+                        break;
+                    }
+                }
+            }//мы же хотим чтобы он падал, когда шагаел с уступа?
+
             body_arg.left += moveVector.x;
             body_arg.top  += moveVector.y;
             return grounded;
@@ -438,6 +481,7 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
     }\
 }
 
+    // тут первая логическая часть
     //обнаруживаем столкновения об угол углом коллизии
     if(  (moveVector.x!=0) && (moveVector.y!=0) )
     {
@@ -463,7 +507,8 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
                 movingDirection = CornerOfRect::LeftUp;
         }
 
-        //если бы я мог прилепить сюда бумажку со схемами, этот код был бы куда понятнее
+        //если прямоугольник движется вниз влево или вверх вправо - то углы, которые сбоку от движения - это верхний левый или нижний правый
+        //с bool-ами == работает как NXOR
         if ( movingRight == movingDown )
         {
             upperMovingDot = getCornerCoords(body_arg, CornerOfRect::RightUp);
@@ -534,6 +579,8 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
             }
         }
     }//и-и-и, закончили искать столкновения углом
+
+    //это - врорая часть
     //теперь ищем прямые столкновения
 
 
@@ -576,6 +623,7 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
     }
     EndHorizontalCollizionSearch:
 
+
     //теперь все то же самое, но мы ищем прямые вертикальные коллизии
     if(crossedVerticalBoundary)
     {
@@ -588,6 +636,8 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
                                                                 -abs(body_arg.left+body_arg.width+moveVector.x)*epsiFraction
                                                    ,ycoordOfBody+moveVector.y );
 
+        // если верхний/нижний блок находится выше персонажа, то это дело других частей - тех что ищут
+        // "прыжки на углы" и "удары углом"
         if (!DotCrossesTheHorBoundary(body_arg.left+abs(body_arg.left)*epsiFraction, moveVector.x-abs(body_arg.left)*epsiFraction )
             && map_arg.at(leftTile)!=nullptr && map_arg.at(leftTile)->solid_m)
         {
@@ -639,9 +689,10 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
     }
     EndVerticalCollizionSearch:
 
+    //это третья часть
     //теперь обрабатываем "прыжки на угол"
     if (!(collidedHorizontally||collidedVertically)
-        &&moveVector.x!=0 && moveVector.y!=0 )
+        &&crossedHorizontalBoundary&&crossedVerticalBoundary)
     {
         CornerOfRect movingDirection;
         if (moveVector.x>0)
@@ -660,10 +711,9 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
         }
         Vector2f movingBodyCorner = getCornerCoords(body_arg, movingDirection);
 
-
         Vector2u tileIndex = map_arg.CoordsToIndex(movingBodyCorner+moveVector);
 
-        if(map_arg.at(tileIndex)!=nullptr && map_arg.at(tileIndex)->solid_m)
+        if( map_arg.at(tileIndex)!=nullptr && map_arg.at(tileIndex)->solid_m )
         {
 
             Vector2f tileCorner = getCornerCoords(map_arg.getTileRectByIndex(tileIndex), OppositeRectCorner(movingDirection) );
@@ -680,6 +730,8 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
         }
     }
 
+
+    //эта функция
     FINISH()
 
 #undef COLLIDE_HOR
@@ -917,7 +969,7 @@ int main()
             "s                      s",
             "s         sssss        s",
             "s             s        s",
-            "s             s        s",
+            "s          ssss        s",
             "s             s        s",
             "ssss   sssssssssssssssss"
         };
