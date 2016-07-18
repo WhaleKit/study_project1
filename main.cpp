@@ -1,28 +1,31 @@
 #include <iostream>
-#include <SFML/Graphics.hpp>
-#include <SFML/Audio.hpp>
-
+#include <cstdlib>
 #include <cmath>
+
 #include <utility>
+
 #include <vector>
+
 #include <cassert>
 #include <limits>
 
-#include <fstream>
 #include <algorithm>
 #include <numeric>
+
+#include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
+
 
 using namespace std;
 using namespace sf;
 
 //вы стоите на блоке пола. Очевидно, ваши ноги не относятся к тайлу, на котором вы стоите, арифметика чисел с плавающей запятой
-//считает иначе,
-//так что вы спотыкаетесь на ровном месте. Отныне вам нужно притворятся висящим в воздухе где-то в 1/100000 вашего размера от пола.
+//считает иначе, так что вы спотыкаетесь на ровном месте или проваливаетесь.
+//Отныне вам нужно притворятся висящим в воздухе где-то в 1/100000 вашего размера от пола.
 //а еще вы подопрете стену справа от вас, то окажется, что ваш бок, которым вы оперлись уже внутри нее
 
+constexpr float epsiFraction = numeric_limits<float>::epsilon()*8;
 
-constexpr float epsiFraction = numeric_limits<float>::epsilon()*2;
-//однако, совершенно непоятно, отчего разрабам sfml не сделали FloatRect constexpr-совместимым
 //из этого квадрата можно получить 4 вектора epsi-длины напр. в разные стороны при помощи ф-ии getCornerOfSquare
 const FloatRect epsiQuad(-epsiFraction, -epsiFraction, 2*epsiFraction, 2*epsiFraction);
 
@@ -49,8 +52,8 @@ float vectorTan (Vector2f const& vec_arg)
 }
 
 
-//разработчики SFML проделали отличную работу, но...
-//серьезно?
+//разработчики SFML проделали отличную работу, но
+//некоторые моменты вводят меня в недоумение
 template <typename T>
 Vector2<T> operator *(Vector2<T> const& firts, Vector2<T> const& second)
 {
@@ -98,6 +101,92 @@ CornerOfRect OppositeRectCorner (CornerOfRect arg)
         assert(false); //"похоже, у квадрата появилась 5-я сторона"
     }
 }
+
+//класс абстрагирует анимацию на спрайтщитах, передвигая TextureRect на указанной текстуре в соответствии с текущим кадром
+//при помощи указанной функции. Является и аниматором, поддерживая ангимацию внешнего стпрайта, и анимацией, рисуясь,
+//т.е. может быть использован как незавасимый drawable, так и для анимации внешнего спрайта
+//(он информирован о спрайте, но не аггрегирует его)
+class Animator : public Drawable
+{
+public:
+    typedef IntRect (*TextureRectUpdater) (float, void*);
+
+    Animator (Sprite* sprt_arg=nullptr, float animSpeed_arg = 0.000001
+              , Uint16 framesLimit_arg=1, TextureRectUpdater updaterFunc_arg=nullptr
+              , void* additionalDataPtr_arg=nullptr)
+    :   sprt_m(sprt_arg), animSpeed_m(animSpeed_arg), currentAnimFrame_m(0)
+        ,framesLimit_m(framesLimit_arg), textureRectUpdaterFunction_m(updaterFunc_arg)
+        ,ptrToAdditionalDataForTextureRectUpdaterFunction_m(additionalDataPtr_arg)
+    {}
+
+    ~Animator () {}
+
+    void Update(Time time_arg)
+    {
+        //приводим текущий кадр в соответствии с прошедшим временем
+        currentAnimFrame_m = (currentAnimFrame_m + time_arg.asMicroseconds()*animSpeed_m);
+        if (currentAnimFrame_m>=framesLimit_m)
+            currentAnimFrame_m-=framesLimit_m;
+    }
+    void draw (RenderTarget& renTr_arg, RenderStates states_arg) const override
+    {
+        //приводим спрайт в соотв. с текущим кадром
+        sprt_m->setTextureRect( textureRectUpdaterFunction_m(currentAnimFrame_m
+                                                             , ptrToAdditionalDataForTextureRectUpdaterFunction_m ) );
+        renTr_arg.draw(*sprt_m, states_arg);
+    }
+    void SetSpritePtr (Sprite* newSprite_arg)
+    {
+        sprt_m = newSprite_arg;
+    }
+    Sprite* GetSpritePtr( )
+    {
+        return sprt_m;
+    }
+    void ResetAnim ()
+    {
+        currentAnimFrame_m=0;
+    }
+    void setAnimSpeed (float newSpeed_arg)
+    {
+        animSpeed_m = newSpeed_arg;
+    }
+    float getAnimSpeed ()
+    {
+        return animSpeed_m;
+    }
+    Uint16 getAnimFrameLimit ()
+    {
+        return framesLimit_m;
+    }
+    void setAnimFrameLimit (Uint16 newFrameLimit_arg)
+    {
+        framesLimit_m = newFrameLimit_arg;
+    }
+    void setTextureRectUpdaterFunctionAndData (TextureRectUpdater newTRU_arg, void* newData_arg = nullptr)
+    {
+        textureRectUpdaterFunction_m = newTRU_arg;
+        ptrToAdditionalDataForTextureRectUpdaterFunction_m = newData_arg;
+    }
+    tuple<TextureRectUpdater, void*> getTextureRectUpdaterFunctionAndData ()
+    {
+        return make_tuple(textureRectUpdaterFunction_m
+                          ,ptrToAdditionalDataForTextureRectUpdaterFunction_m);
+    }
+
+private:
+    Sprite* sprt_m;
+    float animSpeed_m=0.000001; //смен кадров в микросекунду
+    float currentAnimFrame_m=0;
+    Uint16 framesLimit_m=1;
+    TextureRectUpdater textureRectUpdaterFunction_m = nullptr;
+    void * ptrToAdditionalDataForTextureRectUpdaterFunction_m = nullptr;
+    //что если бы функции нужно было завиесть от чего-то внешнего? Я мог бы использовать std_function, но он слишком медленный для игр
+    //так что в функцию передается указатель на она сама разберется какие данные, или nullptr, если она в них не нуждается
+};
+//да, я мог бы сделать animator абтрактным классом, но тогда мне придется все время обращатся к его потомкам по указателю
+//или ссылке, и я не смогу гарантировать их одинаковые размеры
+//так я сделал 1 класс "толще" на 1 указатель, но получид дополнительную гибкость
 
 
 class Entity
@@ -220,6 +309,7 @@ public:
     Uint8 tileSize = 100;
 private:
     Vector2f startOffset_m = Vector2f(0,0); //я не могу позволить себе сделать Tileset2d прибитым гвоздями к началу координат
+    //динамическая память
     vector<Tile*> content_m;
     Uint16 height_m;
     Uint16 width_m;
@@ -229,7 +319,7 @@ private:
 
 
 //функция работает, только если вектор от начала вектора-аргумента до точки и вектор-аргумент находятся в одной четверти
-//-1 точка ниже, 1 - выше, 0 - на нем
+//меньше нуля - точка ниже, больше нуля - выше, 0 - на нем
 Int8 DotPositionRelativeToVector (Vector2f dotCoords_arg, Vector2f vectorStartCoords_arg, Vector2f vectorItself_arg)
 {
     float TanDiff = vectorTan(vectorItself_arg) - vectorTan( dotCoords_arg - vectorStartCoords_arg );
@@ -246,8 +336,7 @@ Int8 DotPositionRelativeToVector (Vector2f dotCoords_arg, Vector2f vectorStartCo
     return 0;
 }
 
-//
-#define LOGGING_ENABLED
+//#define LOGGING_ENABLED
 
 //данная функция меняет скорость и положение тела, но не его габариты
 //возвращает true, если к концу работы под ногамии у тела есть опора, false - если таковой нет
@@ -340,7 +429,6 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
             return map_arg.XCoordToIndex(xcoord) != map_arg.XCoordToIndex(xcoord+xShift);
         };
 
-        //direction - какую сторону, вы хотети проверить, пробивает вектор? -1-floor,
     static auto DotCrossesTheVerBoundary = [&map_arg] ( float ycoord, float yShift ) ->bool
         {
             return map_arg.YCoordToIndex(ycoord) != map_arg.YCoordToIndex(ycoord+yShift);
@@ -1001,10 +1089,11 @@ int main()
     sprt.setScale(2,2);
     sprt.setPosition(-300, 100);
     FloatRect FangCollizion = sprt.getGlobalBounds();
+    FangCollizion.height-=FangCollizion.height*0.0001; //это чтобы он мог проходить в проходы высотой с него
     PlayableCharacter Fang(&FangCollizion ,&sprt);
     Fang.locationMap_m = &levelTiles;
     Fang.state_m = PlayableCharacter::State_m::inAir;
-    //level content
+    //level content динамическая память
     vector<Entity*> entitiesOnLevel;
     entitiesOnLevel.push_back(&Fang);
 
