@@ -45,7 +45,7 @@ int main()
         {
             "s                      s",
             "s                      s",
-            "s   ssssssssssssssssssss",
+            "s   ssssssss  ssssssssss",
             "s                      s",
             "s   sssss              s",
             "s                      s",

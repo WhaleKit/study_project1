@@ -82,8 +82,7 @@ public:
             state_m = State_m::standing;
         }
         if  (   ((sf::Keyboard::isKeyPressed(Keyboard::W))||(sf::Keyboard::isKeyPressed(Keyboard::Space)))
-                && state_m!= State_m::inAir
-            )
+                && state_m!= State_m::inAir)
         {
             state_m = State_m::inAir;
             speed_m.y = -jumpingSpeed_m;
@@ -111,12 +110,20 @@ public:
 
         currentAnimation_m->setFacingLeft(facingLeft_m);
     }
-
+    bool debug_wasInAir_m;
     void Update(sf::Time frameTime_arg) override
     {
+
+#include <iostream>
+        if ( (state_m==State_m::inAir) != debug_wasInAir_m  )
+        {
+            cout << ( (state_m == State_m::inAir) ? "now he in air" : "now he not in air");
+        }
+        debug_wasInAir_m = (state_m == State_m::inAir);
+
         readApplyUserInput();
 
-        /*
+        /*считалка времени между обновлениями
         static vector<Uint32> frameTimes(400);
         static vector<Uint32>::iterator currentIter = frameTimes.begin();
         ++currentIter;
