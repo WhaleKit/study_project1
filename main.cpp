@@ -29,11 +29,11 @@ constexpr float epsiFraction = numeric_limits<float>::epsilon()*8;
 //из этого квадрата можно получить 4 вектора epsi-длины напр. в разные стороны при помощи ф-ии getCornerOfSquare
 const FloatRect epsiQuad(-epsiFraction, -epsiFraction, 2*epsiFraction, 2*epsiFraction);
 
-inline float LittleLessThat (float const arg, int mul_arg = 1)
+inline float LittleLessThan (float const arg, int mul_arg = 1)
 {
     return arg - abs(arg)*epsiFraction*mul_arg;
 }
-inline float LittleMoreThat (float const arg, int mul_arg = 1)
+inline float LittleMoreThan (float const arg, int mul_arg = 1)
 {
     return arg + abs(arg)*epsiFraction*mul_arg;
 }
@@ -101,6 +101,10 @@ CornerOfRect OppositeRectCorner (CornerOfRect arg)
         assert(false); //"похоже, у квадрата появилась 5-я сторона"
     }
 }
+inline IntRect HorizontalFlip(IntRect const& ir_arg)
+{
+    return IntRect(ir_arg.left+ir_arg.width ,ir_arg.top, -ir_arg.width ,ir_arg.height);
+}
 
 //класс абстрагирует анимацию на спрайтщитах, передвигая TextureRect на указанной текстуре в соответствии с текущим кадром
 //при помощи указанной функции. Является и аниматором, поддерживая ангимацию внешнего стпрайта, и анимацией, рисуясь,
@@ -121,18 +125,28 @@ public:
 
     ~Animator () {}
 
-    void Update(Time time_arg)
+    inline void timePassed(Time time_arg)
     {
         //приводим текущий кадр в соответствии с прошедшим временем
         currentAnimFrame_m = (currentAnimFrame_m + time_arg.asMicroseconds()*animSpeed_m);
         if (currentAnimFrame_m>=framesLimit_m)
             currentAnimFrame_m-=framesLimit_m;
+
+        updateSprite();
     }
+    inline void updateSprite ()
+    {
+        IntRect  ir= textureRectUpdaterFunction_m(currentAnimFrame_m
+                                                , ptrToAdditionalDataForTextureRectUpdaterFunction_m );
+        sprt_m->setTextureRect( ir );
+        if (facingLeft_m)
+            sprt_m->setTextureRect(HorizontalFlip( sprt_m->getTextureRect() ));
+    }
+    inline void setFacingLeft(bool arg)
+        {facingLeft_m=arg;}
     void draw (RenderTarget& renTr_arg, RenderStates states_arg) const override
     {
         //приводим спрайт в соотв. с текущим кадром
-        sprt_m->setTextureRect( textureRectUpdaterFunction_m(currentAnimFrame_m
-                                                             , ptrToAdditionalDataForTextureRectUpdaterFunction_m ) );
         renTr_arg.draw(*sprt_m, states_arg);
     }
     void SetSpritePtr (Sprite* newSprite_arg)
@@ -175,16 +189,18 @@ public:
     }
 
 private:
-    Sprite* sprt_m;
+    bool facingLeft_m=false;
+    Sprite* sprt_m=nullptr;
     float animSpeed_m=0.000001; //смен кадров в микросекунду
     float currentAnimFrame_m=0;
     Uint16 framesLimit_m=1;
     TextureRectUpdater textureRectUpdaterFunction_m = nullptr;
     void * ptrToAdditionalDataForTextureRectUpdaterFunction_m = nullptr;
     //что если бы функции нужно было завиесть от чего-то внешнего? Я мог бы использовать std_function, но он слишком медленный для игр
-    //так что в функцию передается указатель на она сама разберется какие данные, или nullptr, если она в них не нуждается
+    //так что в функцию передается указатель на она_сама_разберется_какие_данные, или nullptr, если она в них не нуждается
 };
-//да, я мог бы сделать animator абтрактным классом, но тогда мне придется все время обращатся к его потомкам по указателю
+//да, я мог бы сделать animator абтрактным классом, c виртуальным update
+// но тогда мне придется все время обращатся к его потомкам по указателю
 //или ссылке, и я не смогу гарантировать их одинаковые размеры
 //так я сделал 1 класс "толще" на 1 указатель, но получид дополнительную гибкость
 
@@ -211,7 +227,7 @@ public:
 float floorLevel = 1205;
 
 
-
+//классы для тайла и для сетки составленной из тайлов
 class Tile
 {
 public:
@@ -338,9 +354,14 @@ Int8 DotPositionRelativeToVector (Vector2f dotCoords_arg, Vector2f vectorStartCo
 
 //#define LOGGING_ENABLED
 
+
+bool standingOnGround (Tileset2d const& map_arg, FloatRect & body_arg, float soleThickness)
+{
+
+}
+
 //данная функция меняет скорость и положение тела, но не его габариты
 //возвращает true, если к концу работы под ногамии у тела есть опора, false - если таковой нет
-
 bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, Vector2f & bodySpeed_arg, Time time_arg)
 {
 
@@ -500,15 +521,15 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
             {
                 if(moveVector.x>0)
                 {
-                    float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex( LittleLessThat(body_arg.left+body_arg.width,2) ) +1 );
-                    moveVector.x = wallX - LittleMoreThat(body_arg.left+body_arg.width) ;
+                    float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex( LittleLessThan(body_arg.left+body_arg.width,2) ) +1 );
+                    moveVector.x = wallX - LittleMoreThan(body_arg.left+body_arg.width) ;
 
                     moveVector.y = minByAbs(moveVector.y, moveVector.y * (moveVector.y / origMoveVector.y)  );
                 }
                 else
                 {
-                    float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex( LittleMoreThat(body_arg.left) ) );
-                    moveVector.x = wallX - LittleLessThat(body_arg.left);
+                    float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex( LittleMoreThan(body_arg.left) ) );
+                    moveVector.x = wallX - LittleLessThan(body_arg.left);
 
                     moveVector.y = minByAbs(moveVector.y, moveVector.y * (moveVector.y / origMoveVector.y)  );
                 }
@@ -519,15 +540,15 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
                 if (moveVector.y>0)
                 {
                     grounded = true;
-                    float floorY =  map_arg.YIndexToCoord( map_arg.YCoordToIndex( LittleLessThat(body_arg.top+body_arg.height,2)) + 1 );
-                    moveVector.y = (floorY) - LittleMoreThat(body_arg.top+body_arg.height);
+                    float floorY =  map_arg.YIndexToCoord( map_arg.YCoordToIndex( LittleLessThan(body_arg.top+body_arg.height,2)) + 1 );
+                    moveVector.y = (floorY) - LittleMoreThan(body_arg.top+body_arg.height);
 
                     moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
                 }
                 else
                 {
-                    float ceilingY = map_arg.YCoordToIndex( map_arg.YIndexToCoord(LittleMoreThat(body_arg.top,2) ));
-                    moveVector.y = ceilingY - LittleMoreThat(body_arg.top);
+                    float ceilingY = map_arg.YCoordToIndex( map_arg.YIndexToCoord(LittleMoreThan(body_arg.top,2) ));
+                    moveVector.y = ceilingY - LittleMoreThan(body_arg.top);
 
                     moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
                 }
@@ -692,10 +713,10 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
     {
         float XcoordOfBody = (moveVector.x>0)? (body_arg.left+body_arg.width) : (body_arg.left);
 
-        Vector2u upperTile = map_arg.CoordsToIndex( Vector2f(XcoordOfBody+moveVector.x, LittleMoreThat(body_arg.top+moveVector.y) ) );
+        Vector2u upperTile = map_arg.CoordsToIndex( Vector2f(XcoordOfBody+moveVector.x, LittleMoreThan(body_arg.top+moveVector.y) ) );
 
         Vector2u downTile  = map_arg.CoordsToIndex( Vector2f(XcoordOfBody+moveVector.x
-                                                             ,LittleLessThat(body_arg.top+body_arg.height+moveVector.y) ));
+                                                             ,LittleLessThan(body_arg.top+body_arg.height+moveVector.y) ));
 
         if ( !(DotCrossesTheVerBoundary( body_arg.top+abs(body_arg.top)*epsiFraction, moveVector.y-abs(body_arg.top)*epsiFraction )
                &&moveVector.y<0 )
@@ -731,8 +752,8 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
     {
         float ycoordOfBody = moveVector.y>0? (body_arg.top+body_arg.height) : (body_arg.top);
 
-        Vector2u leftTile  = map_arg.CoordsToIndex( LittleMoreThat(body_arg.left+moveVector.x),ycoordOfBody+moveVector.y );
-        Vector2u rightTile = map_arg.CoordsToIndex( LittleLessThat(body_arg.left+body_arg.width+moveVector.x)
+        Vector2u leftTile  = map_arg.CoordsToIndex( LittleMoreThan(body_arg.left+moveVector.x),ycoordOfBody+moveVector.y );
+        Vector2u rightTile = map_arg.CoordsToIndex( LittleLessThan(body_arg.left+body_arg.width+moveVector.x)
                                                    ,ycoordOfBody+moveVector.y );
 
         // если верхний/нижний блок находится выше персонажа, то это дело других частей - тех что ищут
@@ -814,11 +835,27 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
 }
 
 
+
 class PlayableCharacter : public Entity
 {
 public:
     PlayableCharacter(FloatRect* collizion_arg, Sprite* renderComponent_arg)
-    : collizion_m(collizion_arg), renderComponent_m(renderComponent_arg)
+    :   collizion_m(collizion_arg), renderComponent_m(renderComponent_arg)
+        ,walkingAnimation_m(renderComponent_arg, 0.000007, 4
+                        ,[]( float currentFrame_arg, void* data_arg )->IntRect
+                             {
+                                return IntRect(108*int(currentFrame_arg), 364, 108 , 182) ;
+                             }
+                         ,nullptr )
+        ,idleAnimation_m(renderComponent_arg, 0.000001, 5
+                        ,[]( float currentFrame_arg, void* data_arg )->IntRect
+                            {
+                                if(currentFrame_arg>2)
+                                    return IntRect(216+108*int(5-currentFrame_arg), 0, 108 , 182);
+                                else
+                                    return IntRect(216+108*int(currentFrame_arg), 0, 108 , 182);
+                            }
+                         ,nullptr)
     {    }
 
     ~PlayableCharacter()
@@ -828,6 +865,7 @@ public:
 
     void readApplyUserInput()
     {
+        //как хорошо бы тут подошел множественный switch
         if ( sf::Keyboard::isKeyPressed(sf::Keyboard::A)!=Keyboard::isKeyPressed(Keyboard::D) )
         {
             if (state_m != State_m::inAir)
@@ -835,14 +873,27 @@ public:
                 if ( sf::Keyboard::isKeyPressed(sf::Keyboard::A) )
                 {
                     speed_m.x = -walkingSpeed_m;
-                    lookingLeft_m = true;
+                    facingLeft_m = true;
                 }
                 else
                 {
                     speed_m.x = walkingSpeed_m;
-                    lookingLeft_m = false;
+                    facingLeft_m = false;
                 }
                 state_m = State_m::walking;
+            }
+            else
+            {
+                if ( sf::Keyboard::isKeyPressed(sf::Keyboard::A) )
+                {
+                    speed_m.x = -walkingSpeed_m*airControl_m;
+                    facingLeft_m = true;
+                }
+                else
+                {
+                    speed_m.x = walkingSpeed_m*airControl_m;
+                    facingLeft_m = false;
+                }
             }
         }
         else if (state_m != State_m::inAir)
@@ -856,6 +907,28 @@ public:
             state_m = State_m::inAir;
             speed_m.y = -jumpingSpeed_m;
         }
+    }
+
+    void SelectPropperAnimation()
+    {
+
+        switch ( state_m)
+        {
+        case State_m::standing:
+            if (weaponState_m==WeaponState_m::noWeapon)
+                currentAnimation_m = &idleAnimation_m;
+            else
+                ;//todo
+            break;
+        case State_m::walking:
+            if (weaponState_m==WeaponState_m::noWeapon)
+                currentAnimation_m = &walkingAnimation_m;
+            else
+                ;//todo
+            break;
+        }
+
+        currentAnimation_m->setFacingLeft(facingLeft_m);
     }
 
     void Update(sf::Time frameTime_arg) override
@@ -873,17 +946,20 @@ public:
             cout << "mics: "<< ( accumulate(frameTimes.begin(), frameTimes.end(), 0) / 400)  << endl;
         }
         */
-
-        currentAnimFrame_m+=animSpeed_m*frameTime_arg.asMicroseconds();
+        currentAnimation_m->timePassed(frameTime_arg);
+        //temp_frame_m+=frameTime_arg.asMicroseconds()*0.000004;
+        //
 
 
         //apply state-specific things
         if (state_m == State_m::standing)
+        {
             speed_m.x = 0;
-/*
-        if (state_m!=inAir)
+        }
+
+        if (state_m!=State_m::inAir)
             speed_m.y=0;
-*/
+
         if (state_m == State_m::inAir)
         {
             speed_m.y += frameTime_arg.asMicroseconds()* gravityAcceleration/(1000000000);
@@ -917,7 +993,7 @@ public:
                 state_m = State_m::walking;
             //onGround_m=true;
         }
-
+        SelectPropperAnimation();
     }
 
     sf::Drawable* getDrawableComponent() override
@@ -928,51 +1004,58 @@ public:
         renderComponent_m->setPosition( Vector2f(collizion_m->left, collizion_m->top)
                                         +spriteCoordRelativeToCollision_m
                                       );
-        if (state_m == State_m::walking)
+        /*
+        if(facingLeft_m)
+            currentAnimation_m->setFacingLeft(facingLeft_m);
+
+        if (state_m==State_m::walking)
         {
-            if (currentAnimFrame_m>6)
-                currentAnimFrame_m = fmod (currentAnimFrame_m, 6);
-            if (lookingLeft_m)
-                renderComponent_m->setTextureRect(IntRect(40+40*int(currentAnimFrame_m), 244, -40, 50));
-            else
-                renderComponent_m->setTextureRect(IntRect(40*int(currentAnimFrame_m), 244, 40, 50));
+            if (temp_frame_m>4)
+                temp_frame_m-=4;
+            renderComponent_m->setTextureRect( IntRect(108*int(temp_frame_m), 364, 108 , 182) );
+            if (facingLeft_m)
+                renderComponent_m->setTextureRect( HorizontalFlip( renderComponent_m->getTextureRect() ) );
         }
-        else if (state_m == State_m::standing)
+
+        if (state_m==State_m::standing)
         {
-            if (currentAnimFrame_m>5)
-                currentAnimFrame_m = fmod (currentAnimFrame_m, 5.0f);
 
-            if (currentAnimFrame_m>3)
-            {
-                if (lookingLeft_m)
-                    renderComponent_m->setTextureRect(IntRect(44+44*int(5 - currentAnimFrame_m), 189, -44, 50));
-                else
-                    renderComponent_m->setTextureRect(IntRect(44*int(5 - currentAnimFrame_m), 189, 44, 50));
-            }
-            else if (lookingLeft_m)
-                renderComponent_m->setTextureRect(IntRect(44+44*int(currentAnimFrame_m), 189, -44, 50));
+            if (temp_frame_m>5)
+                temp_frame_m-=5;
+            if(temp_frame_m>2)
+                renderComponent_m->setTextureRect(  IntRect(216+108*int(5-temp_frame_m), 0, 108 , 182)  );
             else
-                renderComponent_m->setTextureRect(IntRect(44*int(currentAnimFrame_m), 189, 44, 50));
-        } //189 - top, 44 - width, 50 - height
-
+                renderComponent_m->setTextureRect(  IntRect(216+108*int(temp_frame_m), 0, 108 , 182)  );
+            if (facingLeft_m)
+                renderComponent_m->setTextureRect( HorizontalFlip( renderComponent_m->getTextureRect() ) );
+        }*/
 
         return renderComponent_m;
     }
 
     Vector2f spriteCoordRelativeToCollision_m = Vector2f(0,0);
     //смещение левого верхнего угла спрайта от верхнего левого угла коллизии
-    float currentAnimFrame_m=0;
 
+    //\
+    float temp_frame_m=0;
+    //
+    Animator walkingAnimation_m;
+    Animator idleAnimation_m;
+    //todo еще 2 анимации
+
+    Animator* currentAnimation_m=&idleAnimation_m;
     enum class State_m {walking, standing, inAir};
     State_m state_m         = State_m::standing;
-
-    bool lookingLeft_m      = false; //в противном случае смотрит вправо
+    enum class WeaponState_m {noWeapon, pistol};
+    WeaponState_m weaponState_m = WeaponState_m::noWeapon;
+    bool facingLeft_m       = false; //в противном случае смотрит вправо
 
     Vector2f speed_m        = Vector2f(0,0);
 
     //скорость - в пикселях в микросекунду
     float jumpingSpeed_m        = 0.002; //вертикальная скорость, которая ему придается при прыжке
     float walkingSpeed_m        = 0.001;  //скорость, с которой он ходит
+    float airControl_m          = 0.2;      //с какой скоростью относительно обычной PC может двигаться в воздухе
     float animSpeed_m           = 0.00001; // смен кадров в микросекунду
     sf::FloatRect* collizion_m  = nullptr;
     Sprite* renderComponent_m   = nullptr;
@@ -982,6 +1065,8 @@ public:
     //будет использоваться позже, для взаимодействия с миром
 };
 
+/*
+//функция, которой я тестирую
 int main_()
 {
     //tiles
@@ -1036,6 +1121,10 @@ int main_()
         cout << "f";
     }
 }
+*/
+
+
+
 
 int main()
 {
@@ -1082,17 +1171,18 @@ int main()
 
     //playable character
     sf::Texture myTxtr;
-    myTxtr.loadFromFile("fang.png");
+    myTxtr.loadFromFile("spriteSheet.png");
     sf::Sprite sprt;
     sprt.setTexture(myTxtr);
-    sprt.setTextureRect( IntRect(0, 244, 40, 50) );
-    sprt.setScale(2,2);
+    sprt.setTextureRect( IntRect(0, 364, 108 , 182) );
+    sprt.setScale(0.7,0.7);
     sprt.setPosition(-300, 100);
     FloatRect FangCollizion = sprt.getGlobalBounds();
     FangCollizion.height-=FangCollizion.height*0.0001; //это чтобы он мог проходить в проходы высотой с него
     PlayableCharacter Fang(&FangCollizion ,&sprt);
     Fang.locationMap_m = &levelTiles;
     Fang.state_m = PlayableCharacter::State_m::inAir;
+
     //level content динамическая память
     vector<Entity*> entitiesOnLevel;
     entitiesOnLevel.push_back(&Fang);
