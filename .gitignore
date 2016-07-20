@@ -2,5 +2,5 @@
 *.layout
 /bin/
 /obj/
+/animation-source/
 *-autosave.kra
-*.png
