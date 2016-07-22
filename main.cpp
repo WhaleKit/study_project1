@@ -24,7 +24,67 @@ using namespace std;
 using namespace sf;
 
 
+int main_()
+{
+    //tiles
+    Tile stone;
+    stone.solid_m = true;
+    sf::RectangleShape stoneTileShape(Vector2f(100, 100));
+    stoneTileShape.setFillColor(sf::Color( 200, 200, 200));
+    stone.drawableComponent = &stoneTileShape;
 
+    //levelMap
+    //Tile* levelTiles[levelWidth][levelHight];
+    Tileset2d levelTiles(24,11);
+    {
+        constexpr char const* levelCheme[] =
+        {
+            "s                      s",
+            "s                      s",
+            "s   ssssssss  ssssssssss",
+            "s                      s",
+            "s   sssss              s",
+            "s                      s",
+            "s         sssss        s",
+            "s             s        s",
+            "s          ssss        s",
+            "s             s        s",
+            "ssss sssssssssssssssssss"
+        };
+
+        for (int x=0; x<levelTiles.getWidth(); ++x)
+            for (int y=0; y<levelTiles.getHeight(); ++y)
+        {
+            switch (levelCheme[y][x])
+            {
+            case 's':
+                levelTiles.at(x, y) = &stone;
+                break;
+            default:
+                break;
+            }
+        }
+    }
+
+    //playable character
+    sf::Texture myTxtr;
+    myTxtr.loadFromFile("spriteSheet.png");
+    sf::Sprite sprt;
+    sprt.setTexture(myTxtr);
+    sprt.setTextureRect( IntRect(0, 364, 108 , 182) );
+    sprt.setScale(0.7,0.7);
+    sprt.setPosition(-300, -200);
+    FloatRect FangCollizion = sprt.getGlobalBounds();
+    FangCollizion.height-=FangCollizion.height*0.0001; //это чтобы он мог проходить в проходы высотой с него
+    PlayableCharacter Fang(&FangCollizion ,&sprt);
+    Fang.locationMap_m = &levelTiles;
+    Fang.state_m = PlayableCharacter::State_m::standing;
+
+    Fang.collizion_m->left = 1657.71;
+    Fang.collizion_m->top= 872.612;
+    Fang.Update(microseconds(8333));
+
+}
 
 
 int main()
@@ -77,7 +137,7 @@ int main()
     sprt.setTexture(myTxtr);
     sprt.setTextureRect( IntRect(0, 364, 108 , 182) );
     sprt.setScale(0.7,0.7);
-    sprt.setPosition(-300, 100);
+    sprt.setPosition(-300, -200);
     FloatRect FangCollizion = sprt.getGlobalBounds();
     FangCollizion.height-=FangCollizion.height*0.0001; //это чтобы он мог проходить в проходы высотой с него
     PlayableCharacter Fang(&FangCollizion ,&sprt);
@@ -99,8 +159,9 @@ int main()
     sf::CircleShape shape(100.f);
     shape.setFillColor(sf::Color::Green);
     window.setView(myCamera);
+    window.setFramerateLimit(120);
     //main cycle
-    static const Time minFrameTime = seconds(1/480); //120 fps should be enought
+    static const Time minFrameTime = seconds(1.0/120); //120 fps should be enough
     while (window.isOpen())
     {
         sf::Time frameTime = clc.getElapsedTime();
@@ -122,7 +183,7 @@ int main()
 
         for (Entity* toUpdate : entitiesOnLevel)
         {
-            toUpdate->Update(frameTime);
+            toUpdate->Update(/*frameTime*/ minFrameTime );
         }
 
         //rendering
@@ -149,11 +210,9 @@ int main()
         window.draw(shape);
 
         window.display();
-
+/*
         if (frameTime<minFrameTime)
-        {
-            sleep(minFrameTime-frameTime);
-        }
+            sleep(minFrameTime-frameTime);*/
     }
     return 0;
 }

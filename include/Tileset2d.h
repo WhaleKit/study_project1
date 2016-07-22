@@ -24,7 +24,7 @@ public:
     {
         return content_m[y_arg*width_m + x_arg];
     }
-    Tile*& at (Uint32 index_arg)
+    Tile*& RawAt (Uint32 index_arg)
     {
         return content_m[index_arg];
     }

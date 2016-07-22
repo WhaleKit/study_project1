@@ -97,9 +97,8 @@ Int8 DotPositionRelativeToVector (Vector2f dotCoords_arg, Vector2f vectorStartCo
 //#define LOGGING_ENABLED
 
 
-
 //данная функция меняет скорость и положение тела, но не его габариты
-//возвращает true, если к концу работы под ногамии у тела есть опора, false - если таковой нет
+//возвращает true, если тело столкнулось с опорой снизу, false в противном случае
 bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, Vector2f & bodySpeed_arg, Time time_arg)
 {
 
@@ -108,7 +107,7 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
 
         //использовалось для отслеживания багов с провалом сквозь землю и прохождением сквозь стены
         //зная аргументты я мог позже воспроизвести его и посмотреть выполнение пошагово
-        //дело в том, что отладка во время самой игры затруднена из-за того, что часы продолжают идти, да прокликивать
+        //дело в том, что отладка во время самой игры затруднена из-за того, что часы не останавливаются, да прокликивать
         //f8 300 раз, чтобы добраться до того места, где баг воспроизводится... Проще поймать состояние логгером
         //и потом воспроизводить в тесте
 #ifdef LOGGING_ENABLED
@@ -157,30 +156,9 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
 #endif // LOGGING_ENABLED
 
 
-    if ((moveVector.x == 0)  && (abs(moveVector.y) <= epsiFraction*abs(moveVector.y)))
+    if ( (moveVector.x == 0)  && (moveVector.y==0) )
     {
-        //определим наличия опоры под ногами
-        bool thereIsFooting = false;
-        {
-
-            Vector2f dot = getCornerCoords(body_arg, CornerOfRect::LeftDown);
-            dot +=  abs(dot)*Vector2f(epsiFraction, 2*epsiFraction);
-            Vector2u leftTile = map_arg.CoordsToIndex(dot);
-
-            dot = getCornerCoords(body_arg, CornerOfRect::RightDown) + Vector2f(-epsiFraction, 2*epsiFraction);
-            dot += abs(dot)*Vector2f(-epsiFraction, 2*epsiFraction);
-            Uint16 rightTileX = map_arg.CoordsToIndex(dot).x;
-
-            for (int x = leftTile.x; x<=rightTileX; x++)
-            {
-                if (map_arg.at(x, leftTile.y)!=nullptr && map_arg.at(x, leftTile.y)->solid_m )
-                {
-                    thereIsFooting = true;
-                    break;
-                }
-            }
-        }
-        return thereIsFooting;
+        return false;
     }
 
     static auto DotCrossesTheHorBoundary = [&map_arg] ( float xcoord, float xShift  ) -> bool
@@ -262,14 +240,14 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
                     float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex( LittleLessThan(body_arg.left+body_arg.width,2) ) +1 );
                     moveVector.x = wallX - LittleMoreThan(body_arg.left+body_arg.width) ;
 
-                    moveVector.y = minByAbs(moveVector.y, moveVector.y * (moveVector.y / origMoveVector.y)  );
+                    //moveVector.y = minByAbs(moveVector.y, moveVector.y * (moveVector.y / origMoveVector.y)  );
                 }
                 else
                 {
                     float wallX = map_arg.XIndexToCoord(  map_arg.XCoordToIndex( LittleMoreThan(body_arg.left) ) );
                     moveVector.x = wallX - LittleLessThan(body_arg.left);
 
-                    moveVector.y = minByAbs(moveVector.y, moveVector.y * (moveVector.y / origMoveVector.y)  );
+                    //moveVector.y = minByAbs(moveVector.y, moveVector.y * (moveVector.y / origMoveVector.y)  );
                 }
                 bodySpeed_arg.x=0;
             }
@@ -281,38 +259,17 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
                     float floorY =  map_arg.YIndexToCoord( map_arg.YCoordToIndex( LittleLessThan(body_arg.top+body_arg.height,2)) + 1 );
                     moveVector.y = (floorY) - LittleMoreThan(body_arg.top+body_arg.height);
 
-                    moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
+                    //moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
                 }
                 else
                 {
                     float ceilingY = map_arg.YCoordToIndex( map_arg.YIndexToCoord(LittleMoreThan(body_arg.top,2) ));
                     moveVector.y = ceilingY - LittleMoreThan(body_arg.top);
 
-                    moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
+                    //moveVector.x = minByAbs(moveVector.x, moveVector.x * (moveVector.x / origMoveVector.x)  );
                 }
                 bodySpeed_arg.y=0;
             }
-            //проверяем, стоит ли тело на земле
-            if ( abs(moveVector.y) <= epsiFraction*abs(moveVector.y) )
-            {
-                Vector2f dot = getCornerCoords(body_arg, CornerOfRect::LeftDown);
-                dot +=  abs(dot)*Vector2f(epsiFraction, 2*epsiFraction);
-                Vector2u leftTile = map_arg.CoordsToIndex(dot);
-
-                dot = getCornerCoords(body_arg, CornerOfRect::RightDown) + Vector2f(-epsiFraction, 2*epsiFraction);
-                dot += abs(dot)*Vector2f(-epsiFraction, 2*epsiFraction);
-                Uint16 rightTileX = map_arg.CoordsToIndex(dot).x;
-
-                for (int x = leftTile.x; x<=rightTileX; x++)
-                {
-                    if (map_arg.at(x, leftTile.y)!=nullptr && map_arg.at(x, leftTile.y)->solid_m )
-                    {
-                        grounded = true;
-                        break;
-                    }
-                }
-            }//мы же хотим чтобы он падал, когда шагал с уступа/земля под ногами пропадала?
-
             body_arg.left += moveVector.x;
             body_arg.top  += moveVector.y;
             return grounded;
@@ -350,8 +307,8 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
         Vector2f upperMovingDot, lowerMovingDot,
                    upperEpsiVec, lowerEpsiVec;
 
-        bool movingRight = moveVector.x>0,
-                movingDown = moveVector.y>0;
+        bool movingRight = moveVector.x>0
+            ,movingDown  = moveVector.y>0;
 
         CornerOfRect movingDirection;
         if (movingRight)
@@ -572,6 +529,33 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
 #undef FINISH
 }
 
+//<s>возвращает true или false если выполнение достигает оператора return и мусор в противном случае</s>
+//возвращает true если тело имеет опору под ногами
+//(с самого начала не стоило передавать эту функцию moveTroughtTileAndCollide)
+bool StandingOnTheSolidGround (Tileset2d const& map_arg, FloatRect const& body_arg, const float footingDistance_arg )
+{
+    //определим наличие опоры под ногами
+    bool thereIsFooting = false;
+    {
+        Vector2f dot = getCornerCoords(body_arg, CornerOfRect::LeftDown);
+        dot += Vector2f(abs(dot.x)*epsiFraction, footingDistance_arg);
+        Vector2u leftTile = map_arg.CoordsToIndex(dot);
+
+        dot = getCornerCoords(body_arg, CornerOfRect::RightDown) + Vector2f(-epsiFraction, 2*epsiFraction);
+        dot += Vector2f(-abs(dot.x)*epsiFraction, footingDistance_arg);
+        Uint16 rightTileX = map_arg.CoordsToIndex(dot).x;
+
+        for (int x = leftTile.x; x<=rightTileX; x++)
+        {
+            if (map_arg.at(x, leftTile.y)!=nullptr && map_arg.at(x, leftTile.y)->solid_m )
+            {
+                thereIsFooting = true;
+                break;
+            }
+        }
+    }
+    return thereIsFooting;
+}
 
 
 

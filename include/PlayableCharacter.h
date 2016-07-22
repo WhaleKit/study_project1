@@ -14,7 +14,7 @@ using namespace std;
 using namespace sf;
 
 constexpr float gravityAcceleration = 4*0.98;
-
+constexpr float footingDistance = 0.001;
 
 float floorLevel = 1205;
 class PlayableCharacter : public Entity
@@ -87,6 +87,13 @@ public:
             state_m = State_m::inAir;
             speed_m.y = -jumpingSpeed_m;
         }
+        if (sf::Keyboard::isKeyPressed(Keyboard::T))
+        {
+            cout << "teleportation: enter top: ";
+            cin >> this->collizion_m->top;
+            cout << "\n enter left: ";
+            cin >> this->collizion_m->left;
+        }
     }
 
     void SelectPropperAnimation()
@@ -110,17 +117,33 @@ public:
 
         currentAnimation_m->setFacingLeft(facingLeft_m);
     }
+
+    #define debuglogging
+    #ifdef debuglogging
     bool debug_wasInAir_m;
+        /*speed     coords    microseconds  */
+    tuple<Vector2f, Vector2f, Uint64> debug_log;
+    #endif
     void Update(sf::Time frameTime_arg) override
     {
-
+    #ifdef debuglogging
 #include <iostream>
         if ( (state_m==State_m::inAir) != debug_wasInAir_m  )
         {
-            cout << ( (state_m == State_m::inAir) ? "now he in air" : "now he not in air");
+            cout << ( (state_m == State_m::inAir) ? "\nG->A  " : "\nA->G  ");
+            auto printvec = [](Vector2f vec)->void
+            {
+                cout << " (" << vec.x << ", " << vec.y << ")";
+            };
+            cout << "speed: ";
+            printvec( get<0>(debug_log) );
+            cout << ", pos: ";
+            printvec( get<1>(debug_log) );
+            cout << ", time: " << get<2>(debug_log);
         }
         debug_wasInAir_m = (state_m == State_m::inAir);
 
+    #endif // debuglogging
         readApplyUserInput();
 
         /*считалка времени между обновлениями
@@ -143,10 +166,9 @@ public:
         if (state_m == State_m::standing)
         {
             speed_m.x = 0;
+            speed_m.y=0;
         }
 
-        if (state_m!=State_m::inAir)
-            speed_m.y=0;
 
         if (state_m == State_m::inAir)
         {
@@ -154,8 +176,12 @@ public:
         }
 
 
-        //двигаемся сквозь тайловую карту
-        bool onGround = MoveTroughtTilesAndCollide(*locationMap_m, *collizion_m, speed_m, frameTime_arg);
+    #ifdef debuglogging
+        debug_log = make_tuple( speed_m, Vector2f(collizion_m->left, collizion_m->top), frameTime_arg.asMicroseconds() );
+    #endif // debuglogging
+        //движемся сквозь тайловую карту
+        bool onGround = MoveTroughtTilesAndCollide(*locationMap_m, *collizion_m, speed_m, frameTime_arg)
+                        ||StandingOnTheSolidGround(*locationMap_m, *collizion_m, footingDistance);
 
         if (onGround && state_m==State_m::inAir)
         {
@@ -164,11 +190,10 @@ public:
             else
                 state_m = State_m::standing;
         }
-        if (!onGround && state_m!=State_m::inAir)
+        if (!onGround)
         {
             state_m = State_m::inAir;
         }
-
 
         //глобальный пол
         if( (collizion_m->top + collizion_m->height)  > floorLevel)
@@ -182,6 +207,8 @@ public:
             //onGround_m=true;
         }
         SelectPropperAnimation();
+
+
     }
 
     sf::Drawable* getDrawableComponent() override
@@ -192,31 +219,7 @@ public:
         renderComponent_m->setPosition( Vector2f(collizion_m->left, collizion_m->top)
                                         +spriteCoordRelativeToCollision_m
                                       );
-        /*
-        if(facingLeft_m)
-            currentAnimation_m->setFacingLeft(facingLeft_m);
 
-        if (state_m==State_m::walking)
-        {
-            if (temp_frame_m>4)
-                temp_frame_m-=4;
-            renderComponent_m->setTextureRect( IntRect(108*int(temp_frame_m), 364, 108 , 182) );
-            if (facingLeft_m)
-                renderComponent_m->setTextureRect( HorizontalFlip( renderComponent_m->getTextureRect() ) );
-        }
-
-        if (state_m==State_m::standing)
-        {
-
-            if (temp_frame_m>5)
-                temp_frame_m-=5;
-            if(temp_frame_m>2)
-                renderComponent_m->setTextureRect(  IntRect(216+108*int(5-temp_frame_m), 0, 108 , 182)  );
-            else
-                renderComponent_m->setTextureRect(  IntRect(216+108*int(temp_frame_m), 0, 108 , 182)  );
-            if (facingLeft_m)
-                renderComponent_m->setTextureRect( HorizontalFlip( renderComponent_m->getTextureRect() ) );
-        }*/
 
         return renderComponent_m;
     }
