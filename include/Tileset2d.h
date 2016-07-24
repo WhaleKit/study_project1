@@ -28,11 +28,11 @@ public:
     {
         return content_m[index_arg];
     }
-    Tile* const& at (Vector2u index2d_arg) const
+    Tile* at (Vector2u index2d_arg) const
     {
         return at(index2d_arg.x, index2d_arg.y);
     }
-    Tile* const & at (Uint16 x_arg, Uint16 y_arg) const
+    Tile* at (Uint16 x_arg, Uint16 y_arg) const
     {
         if (x_arg<width_m /*&& x_arg>=0*/ && y_arg<height_m /*&& y_arg>=0*/)
             return content_m[y_arg*width_m + x_arg];
@@ -49,11 +49,17 @@ public:
     }
     inline Uint16 XCoordToIndex(float xCoord_arg) const
     {
-        return static_cast<float>(xCoord_arg - startOffset_m.x)/tileSize;
+        if (xCoord_arg>=0)
+            return static_cast<float>(xCoord_arg - startOffset_m.x)/tileSize;
+        else
+            return static_cast<float>(xCoord_arg - startOffset_m.x)/tileSize - 1;
     }
     inline Uint16 YCoordToIndex(float yCoord_arg) const
     {
-        return static_cast<float>(yCoord_arg - startOffset_m.y)/tileSize;
+        if (yCoord_arg>=0)
+            return static_cast<float>(yCoord_arg - startOffset_m.y)/tileSize;
+        else
+            return static_cast<float>(yCoord_arg - startOffset_m.y)/tileSize - 1;
     }
     inline Vector2u CoordsToIndex(float x_arg, float y_arg) const
     {

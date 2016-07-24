@@ -176,13 +176,13 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
         float xcoord;
         if (moveVector.x>0)
         {
-           xcoord = (body_arg.left+body_arg.width - abs(body_arg.left+body_arg.width)*epsiFraction*2 );
-           crossedHorizontalBoundary = DotCrossesTheHorBoundary(xcoord, moveVector.x*(1+epsiFraction) + abs(body_arg.left+body_arg.width)*epsiFraction );
+           xcoord = (body_arg.left+body_arg.width - abs(body_arg.left+body_arg.width)*epsiFraction*2 )-epsiFraction;
+           crossedHorizontalBoundary = DotCrossesTheHorBoundary(LittleLessThan(xcoord), moveVector.x*(1+epsiFraction) + (1+abs(body_arg.left+body_arg.width))*epsiFraction*2 );
         }
         else if(moveVector.x!=0)
         {
-            xcoord = (body_arg.left + abs(body_arg.left)*epsiFraction*2 );
-            crossedHorizontalBoundary = DotCrossesTheHorBoundary(xcoord, moveVector.x*(1+epsiFraction) - abs(body_arg.left)*epsiFraction);
+            xcoord = (body_arg.left + abs(body_arg.left)*epsiFraction*2 )+epsiFraction;
+            crossedHorizontalBoundary = DotCrossesTheHorBoundary(xcoord, moveVector.x*(1+epsiFraction) - (1+abs(body_arg.left))*epsiFraction*2);
         }
         else
             crossedHorizontalBoundary = false;
@@ -190,12 +190,12 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
         float ycoord;
         if (moveVector.y >0)
         {
-            ycoord = (body_arg.top + body_arg.height) - abs(body_arg.top + body_arg.height)*epsiFraction*2;
+            ycoord = (body_arg.top + body_arg.height) - abs(body_arg.top + body_arg.height)*epsiFraction*2-epsiFraction;
             crossedVerticalBoundary = DotCrossesTheVerBoundary(ycoord, moveVector.y*(1+epsiFraction) + abs(body_arg.top + body_arg.height)*epsiFraction*2);
         }
         else if (moveVector.y!=0)
         {
-            ycoord = body_arg.top + abs(body_arg.top)*epsiFraction*2;
+            ycoord = body_arg.top + abs(body_arg.top)*epsiFraction*2+epsiFraction;
             crossedVerticalBoundary = DotCrossesTheVerBoundary(ycoord, moveVector.y*(1+epsiFraction) - abs(body_arg.top)*epsiFraction*2);
         }
         else
@@ -348,7 +348,7 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
         lowerMovingDot+=lowerEpsiVec;
         //ищем удары лбом об углы (высокие персонажи мне спасибо не скажут)
         if(     DotCrossesTheHorBoundary(upperMovingDot.x, moveVector.x - upperEpsiVec.x)
-            &&  DotCrossesTheVerBoundary(upperMovingDot.y, moveVector.y = upperEpsiVec.y)
+            &&  DotCrossesTheVerBoundary(upperMovingDot.y, moveVector.y - upperEpsiVec.y)
            )
         {
             Vector2f tileCorner = getCornerCoords( map_arg.getTileRectByIndex(map_arg.CoordsToIndex(upperMovingDot)), movingDirection);
@@ -413,7 +413,7 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
         Vector2u downTile  = map_arg.CoordsToIndex( Vector2f(XcoordOfBody+moveVector.x
                                                              ,LittleLessThan(body_arg.top+body_arg.height+moveVector.y) ));
 
-        if ( !(DotCrossesTheVerBoundary( body_arg.top+abs(body_arg.top)*epsiFraction, moveVector.y-abs(body_arg.top)*epsiFraction )
+        if ( !(DotCrossesTheVerBoundary( body_arg.top+(1+abs(body_arg.top))*epsiFraction, moveVector.y-(abs(body_arg.top)+1)*epsiFraction )
                &&moveVector.y<0 )
             && map_arg.at(upperTile)!=nullptr && map_arg.at(upperTile)->solid_m )
         {
@@ -429,8 +429,8 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
                 goto EndHorizontalCollizionSearch;
             }
         }
-        if(!(DotCrossesTheVerBoundary( body_arg.top+body_arg.height - abs(body_arg.top+body_arg.height)*epsiFraction
-                                     ,moveVector.y + abs(body_arg.top+body_arg.height)*epsiFraction )
+        if(!(DotCrossesTheVerBoundary( body_arg.top+body_arg.height - (1+abs(body_arg.top+body_arg.height))*epsiFraction
+                                     ,moveVector.y + (1+abs(body_arg.top+body_arg.height))*epsiFraction )
              && moveVector.y >0  )
            && map_arg.at(downTile)!=nullptr && map_arg.at(downTile)->solid_m)
         {
@@ -453,14 +453,14 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
 
         // если верхний/нижний блок находится выше персонажа, то это дело других частей - тех что ищут
         // "прыжки на углы" и "удары углом"
-        if (!(DotCrossesTheHorBoundary(body_arg.left+abs(body_arg.left)*epsiFraction, moveVector.x-abs(body_arg.left)*epsiFraction )
+        if (!(DotCrossesTheHorBoundary(body_arg.left+(1+abs(body_arg.left))*epsiFraction, moveVector.x-(1+abs(body_arg.left))*epsiFraction )
               && moveVector.x<0 )
             && map_arg.at(leftTile)!=nullptr && map_arg.at(leftTile)->solid_m)
         {
             COLLIDE_VERT()
             goto EndVerticalCollizionSearch;
         }
-        for (Uint16 i = leftTile.x+1; i<rightTile.x; ++i)
+        for (unsigned i = leftTile.x+1; i<rightTile.x; ++i)
         {
             if (map_arg.at(i, leftTile.y)!=nullptr && map_arg.at(i, leftTile.y)->solid_m)
             {
@@ -468,8 +468,8 @@ bool MoveTroughtTilesAndCollide(Tileset2d const& map_arg, FloatRect & body_arg, 
                 goto EndVerticalCollizionSearch;
             }
         }
-        if ( !(DotCrossesTheHorBoundary(body_arg.left+body_arg.width-abs(body_arg.left+body_arg.width)*epsiFraction
-                                        ,moveVector.x+abs(body_arg.left+body_arg.width)*epsiFraction)
+        if ( !(DotCrossesTheHorBoundary(body_arg.left+body_arg.width-(1+abs(body_arg.left+body_arg.width))*epsiFraction
+                                        ,moveVector.x+(1+abs(body_arg.left+body_arg.width))*epsiFraction)
                  &&moveVector.x>0)
             &&map_arg.at(rightTile)!=nullptr && map_arg.at(rightTile)->solid_m )
         {
@@ -538,11 +538,11 @@ bool StandingOnTheSolidGround (Tileset2d const& map_arg, FloatRect const& body_a
     bool thereIsFooting = false;
     {
         Vector2f dot = getCornerCoords(body_arg, CornerOfRect::LeftDown);
-        dot += Vector2f(abs(dot.x)*epsiFraction, footingDistance_arg);
+        dot += Vector2f(abs(dot.x)*epsiFraction+epsiFraction, footingDistance_arg);
         Vector2u leftTile = map_arg.CoordsToIndex(dot);
 
         dot = getCornerCoords(body_arg, CornerOfRect::RightDown) + Vector2f(-epsiFraction, 2*epsiFraction);
-        dot += Vector2f(-abs(dot.x)*epsiFraction, footingDistance_arg);
+        dot += Vector2f(-abs(dot.x)*epsiFraction-epsiFraction, footingDistance_arg);
         Uint16 rightTileX = map_arg.CoordsToIndex(dot).x;
 
         for (int x = leftTile.x; x<=rightTileX; x++)

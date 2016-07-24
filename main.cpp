@@ -15,7 +15,6 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Audio.hpp>
 
-
 #include "Animator.h"
 #include "PlayableCharacter.h"
 #include "Tileset2d.h"
@@ -23,10 +22,14 @@
 using namespace std;
 using namespace sf;
 
+void DoNothing()
+{
+    ;
+}
 
 int main_()
 {
-    //tiles
+//tiles
     Tile stone;
     stone.solid_m = true;
     sf::RectangleShape stoneTileShape(Vector2f(100, 100));
@@ -78,12 +81,14 @@ int main_()
     FangCollizion.height-=FangCollizion.height*0.0001; //это чтобы он мог проходить в проходы высотой с него
     PlayableCharacter Fang(&FangCollizion ,&sprt);
     Fang.locationMap_m = &levelTiles;
-    Fang.state_m = PlayableCharacter::State_m::standing;
+    Fang.state_m = PlayableCharacter::State_m::inAir;
 
-    Fang.collizion_m->left = 1657.71;
-    Fang.collizion_m->top= 872.612;
-    Fang.Update(microseconds(8333));
-
+    Fang.collizion_m->left  = -8.33299-Fang.collizion_m->width;
+    Fang.collizion_m->top   = 1077.61;
+    Fang.speed_m = Vector2f(0.001, 0);
+    Time tm = microseconds(8333);
+    MoveTroughtTilesAndCollide(levelTiles, *Fang.collizion_m, Fang.speed_m, tm);
+    DoNothing();
 }
 
 
@@ -164,11 +169,6 @@ int main()
     static const Time minFrameTime = seconds(1.0/120); //120 fps should be enough
     while (window.isOpen())
     {
-        sf::Time frameTime = clc.getElapsedTime();
-        clc.restart();
-
-
-
         sf::Event event;
         while (window.pollEvent(event))
         {
@@ -187,8 +187,6 @@ int main()
         }
 
         //rendering
-
-        window.clear();
         myCamera.setCenter(Vector2f (Fang.collizion_m->left +Fang.collizion_m->width/2,
                                        Fang.collizion_m->top+Fang.collizion_m->height/2) );
         window.setView(myCamera);
@@ -210,9 +208,8 @@ int main()
         window.draw(shape);
 
         window.display();
-/*
-        if (frameTime<minFrameTime)
-            sleep(minFrameTime-frameTime);*/
+
+        window.clear();
     }
     return 0;
 }

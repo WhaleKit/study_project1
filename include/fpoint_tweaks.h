@@ -18,11 +18,11 @@ const FloatRect epsiQuad(-epsiFraction, -epsiFraction, 2*epsiFraction, 2*epsiFra
 
 inline float LittleLessThan (float const arg, int mul_arg = 1)
 {
-    return arg - abs(arg)*epsiFraction*mul_arg;
+    return arg - abs(arg)*epsiFraction*mul_arg - epsiFraction;
 }
 inline float LittleMoreThan (float const arg, int mul_arg = 1)
 {
-    return arg + abs(arg)*epsiFraction*mul_arg;
+    return arg + abs(arg)*epsiFraction*mul_arg + epsiFraction;
 }
 
 #endif // FPOINT_TWEAKS_H_INCLUDED

@@ -67,12 +67,23 @@ public:
             {
                 if ( sf::Keyboard::isKeyPressed(sf::Keyboard::A) )
                 {
-                    speed_m.x = -walkingSpeed_m*airControl_m;
                     facingLeft_m = true;
+                    if (speed_m.x<0)
+                    {
+                        //модно разгонятся в воздухе не больше скорости ходьбы
+                        //но если вы уже разогнаны - вы не затормозите, но и сильнее не разгонитесь
+                        if(-speed_m.x < walkingSpeed_m)
+                        {
+                            speed_m.x -= airAcceleration_m;
+                        }
+                    }
                 }
-                else
+                else//нажата D
                 {
-                    speed_m.x = walkingSpeed_m*airControl_m;
+                    if(speed_m.x<walkingSpeed_m)
+                    {
+                        speed_m.x += airAcceleration_m;
+                    }
                     facingLeft_m = false;
                 }
             }
@@ -105,13 +116,17 @@ public:
             if (weaponState_m==WeaponState_m::noWeapon)
                 currentAnimation_m = &idleAnimation_m;
             else
-                ;//todo
+                {
+                    //todo
+                }
             break;
         case State_m::walking:
             if (weaponState_m==WeaponState_m::noWeapon)
                 currentAnimation_m = &walkingAnimation_m;
             else
-                ;//todo
+                {
+                    //todo
+                }
             break;
         }
 
@@ -119,34 +134,13 @@ public:
     }
 
     #define debuglogging
-    #ifdef debuglogging
-    bool debug_wasInAir_m;
-        /*speed     coords    microseconds  */
-    tuple<Vector2f, Vector2f, Uint64> debug_log;
-    #endif
     void Update(sf::Time frameTime_arg) override
     {
-    #ifdef debuglogging
-#include <iostream>
-        if ( (state_m==State_m::inAir) != debug_wasInAir_m  )
-        {
-            cout << ( (state_m == State_m::inAir) ? "\nG->A  " : "\nA->G  ");
-            auto printvec = [](Vector2f vec)->void
-            {
-                cout << " (" << vec.x << ", " << vec.y << ")";
-            };
-            cout << "speed: ";
-            printvec( get<0>(debug_log) );
-            cout << ", pos: ";
-            printvec( get<1>(debug_log) );
-            cout << ", time: " << get<2>(debug_log);
-        }
-        debug_wasInAir_m = (state_m == State_m::inAir);
-
-    #endif // debuglogging
         readApplyUserInput();
 
-        /*считалка времени между обновлениями
+
+        /*
+        //считалка времени между обновлениями. Для получения информации о фреймрейте.
         static vector<Uint32> frameTimes(400);
         static vector<Uint32>::iterator currentIter = frameTimes.begin();
         ++currentIter;
@@ -155,14 +149,11 @@ public:
         {
             currentIter=frameTimes.begin();
             cout << "mics: "<< ( accumulate(frameTimes.begin(), frameTimes.end(), 0) / 400)  << endl;
-        }
-        */
+        }*/
+
         currentAnimation_m->timePassed(frameTime_arg);
-        //temp_frame_m+=frameTime_arg.asMicroseconds()*0.000004;
-        //
 
 
-        //apply state-specific things
         if (state_m == State_m::standing)
         {
             speed_m.x = 0;
@@ -172,14 +163,25 @@ public:
 
         if (state_m == State_m::inAir)
         {
+
             speed_m.y += frameTime_arg.asMicroseconds()* gravityAcceleration/(1000000000);
         }
 
 
     #ifdef debuglogging
-        debug_log = make_tuple( speed_m, Vector2f(collizion_m->left, collizion_m->top), frameTime_arg.asMicroseconds() );
+    #include <iostream>
+        if (Keyboard::isKeyPressed(Keyboard::LShift)  )
+        {
+            cout << "\npos: ";
+            cout << " (" << collizion_m->left+collizion_m->width << ", " << collizion_m->top << ")";
+            cout << "  speed: ";
+            cout << " (" << speed_m.x << ", " << speed_m.y << ")";
+            cout << ", time: " << frameTime_arg.asMicroseconds();
+        }
     #endif // debuglogging
         //движемся сквозь тайловую карту
+
+
         bool onGround = MoveTroughtTilesAndCollide(*locationMap_m, *collizion_m, speed_m, frameTime_arg)
                         ||StandingOnTheSolidGround(*locationMap_m, *collizion_m, footingDistance);
 
@@ -227,9 +229,7 @@ public:
     Vector2f spriteCoordRelativeToCollision_m = Vector2f(0,0);
     //смещение левого верхнего угла спрайта от верхнего левого угла коллизии
 
-    //\
-    float temp_frame_m=0;
-    //
+
     Animator walkingAnimation_m;
     Animator idleAnimation_m;
     //todo еще 2 анимации
@@ -244,15 +244,15 @@ public:
     Vector2f speed_m        = Vector2f(0,0);
 
     //скорость - в пикселях в микросекунду
-    float jumpingSpeed_m        = 0.002; //вертикальная скорость, которая ему придается при прыжке
-    float walkingSpeed_m        = 0.001;  //скорость, с которой он ходит
-    float airControl_m          = 0.2;      //с какой скоростью относительно обычной PC может двигаться в воздухе
-    float animSpeed_m           = 0.00001; // смен кадров в микросекунду
+    float jumpingSpeed_m        = 0.002;    //вертикальная скорость, которая ему придается при прыжке
+    float walkingSpeed_m        = 0.001;    //скорость, с которой он ходит
+    float airAcceleration_m     = 0.00002;      //ускорение в воздухе
+    float animSpeed_m           = 0.00001;  // смен кадров в микросекунду
     sf::FloatRect* collizion_m  = nullptr;
     Sprite* renderComponent_m   = nullptr;
 
     Tileset2d* locationMap_m    = nullptr;
-    //Entity, с полем vector<Entity*> *environment_m, которая родитель
+    //<Entity>, с полем vector<Entity*> *environment_m, которая родитель
     //будет использоваться позже, для взаимодействия с миром
 };
 
