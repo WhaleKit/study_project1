@@ -7,7 +7,7 @@ Git_and_SFML_study
 Код и картинки в текущей версии - мои
 
 Проект писался в Code::Blocks, использована библиотека SFML ((Simple and Fast Multimedia Library) - Copyright (c) Laurent Gomila).
-  Картинки рисовались в Krita (c)Krita Foundation. 
+  Картинки рисовались в Krita ((c)Krita Foundation).
   
 Чтобы самостоятельно скомпилировать проект в Code::Blocks, вам нужно подключить к нему SFML, как это сделать можно почитать здесь: 
 http://www.sfml-dev.org/tutorials/2.3/start-cb.php
