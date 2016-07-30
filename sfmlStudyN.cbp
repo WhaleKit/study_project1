@@ -76,10 +76,16 @@
 			<Add option="-Wall" />
 			<Add option="-fexceptions" />
 		</Compiler>
+		<Unit filename="include/ActionOnEntity.h" />
 		<Unit filename="include/Animator.h" />
+		<Unit filename="include/Drawable.h" />
 		<Unit filename="include/Entity.h" />
+		<Unit filename="include/EntityContainer.h" />
+		<Unit filename="include/EntityState.h" />
 		<Unit filename="include/GeometryFunctions.h" />
 		<Unit filename="include/PlayableCharacter.h" />
+		<Unit filename="include/Range.h" />
+		<Unit filename="include/RuntimeSizedObjectsStack.h" />
 		<Unit filename="include/Tile.h" />
 		<Unit filename="include/Tileset2d.h" />
 		<Unit filename="include/fpoint_tweaks.h" />

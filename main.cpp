@@ -18,14 +18,11 @@
 #include "Animator.h"
 #include "PlayableCharacter.h"
 #include "Tileset2d.h"
+#include "Range.h"
 
 using namespace std;
 using namespace sf;
 
-void DoNothing()
-{
-    ;
-}
 
 int main_()
 {
@@ -79,7 +76,8 @@ int main_()
     sprt.setPosition(-300, -200);
     FloatRect FangCollizion = sprt.getGlobalBounds();
     FangCollizion.height-=FangCollizion.height*0.0001; //это чтобы он мог проходить в проходы высотой с него
-    PlayableCharacter Fang(&FangCollizion ,&sprt);
+    vector<Entity*> all;
+    PlayableCharacter Fang(&FangCollizion ,&sprt, &all);
     Fang.locationMap_m = &levelTiles;
     Fang.state_m = PlayableCharacter::State_m::inAir;
 
@@ -88,8 +86,9 @@ int main_()
     Fang.speed_m = Vector2f(0.001, 0);
     Time tm = microseconds(8333);
     MoveTroughtTilesAndCollide(levelTiles, *Fang.collizion_m, Fang.speed_m, tm);
-    DoNothing();
+    //__asm{int 3}
 }
+
 
 
 int main()
@@ -145,12 +144,14 @@ int main()
     sprt.setPosition(-300, -200);
     FloatRect FangCollizion = sprt.getGlobalBounds();
     FangCollizion.height-=FangCollizion.height*0.0001; //это чтобы он мог проходить в проходы высотой с него
-    PlayableCharacter Fang(&FangCollizion ,&sprt);
+
+    vector<Entity*> entitiesOnLevel;
+
+    PlayableCharacter Fang(&FangCollizion ,&sprt, &entitiesOnLevel);
     Fang.locationMap_m = &levelTiles;
     Fang.state_m = PlayableCharacter::State_m::inAir;
 
     //level content динамическая память
-    vector<Entity*> entitiesOnLevel;
     entitiesOnLevel.push_back(&Fang);
 
 
@@ -192,7 +193,8 @@ int main()
         window.setView(myCamera);
         for (Entity* toDraw : entitiesOnLevel)
         {
-            window.draw( *(toDraw->getDrawableComponent()) );
+            if (toDraw!=nullptr)
+                window.draw( *(toDraw->getDrawableComponent()) );
         }
         for (int x=0; x<levelTiles.getWidth(); ++x)
             for (int y=0; y<levelTiles.getHeight(); ++y)
