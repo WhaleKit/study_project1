@@ -42,7 +42,10 @@ class RuntimeSizedObjectsStack
         :   internalData_m(new uint8_t[sizeBytes_arg])
             , bufferSize_m(sizeBytes_arg), stackTopShift_m(0)
         {}
-        ~RuntimeSizedObjectsStack() {}
+        ~RuntimeSizedObjectsStack()
+        {
+            delete[] internalData_m;
+        }
 
 
         bool isEmpty () const

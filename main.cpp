@@ -24,71 +24,6 @@ using namespace std;
 using namespace sf;
 
 
-int main_()
-{
-//tiles
-    Tile stone;
-    stone.solid_m = true;
-    sf::RectangleShape stoneTileShape(Vector2f(100, 100));
-    stoneTileShape.setFillColor(sf::Color( 200, 200, 200));
-    stone.drawableComponent = &stoneTileShape;
-
-    //levelMap
-    //Tile* levelTiles[levelWidth][levelHight];
-    Tileset2d levelTiles(24,11);
-    {
-        constexpr char const* levelCheme[] =
-        {
-            "s                      s",
-            "s                      s",
-            "s   ssssssss  ssssssssss",
-            "s                      s",
-            "s   sssss              s",
-            "s                      s",
-            "s         sssss        s",
-            "s             s        s",
-            "s          ssss        s",
-            "s             s        s",
-            "ssss sssssssssssssssssss"
-        };
-
-        for (int x=0; x<levelTiles.getWidth(); ++x)
-            for (int y=0; y<levelTiles.getHeight(); ++y)
-        {
-            switch (levelCheme[y][x])
-            {
-            case 's':
-                levelTiles.at(x, y) = &stone;
-                break;
-            default:
-                break;
-            }
-        }
-    }
-
-    //playable character
-    sf::Texture myTxtr;
-    myTxtr.loadFromFile("spriteSheet.png");
-    sf::Sprite sprt;
-    sprt.setTexture(myTxtr);
-    sprt.setTextureRect( IntRect(0, 364, 108 , 182) );
-    sprt.setScale(0.7,0.7);
-    sprt.setPosition(-300, -200);
-    FloatRect FangCollizion = sprt.getGlobalBounds();
-    FangCollizion.height-=FangCollizion.height*0.0001; //это чтобы он мог проходить в проходы высотой с него
-    vector<Entity*> all;
-    PlayableCharacter Fang(&FangCollizion ,&sprt, &all);
-    Fang.locationMap_m = &levelTiles;
-    Fang.state_m = PlayableCharacter::State_m::inAir;
-
-    Fang.collizion_m->left  = -8.33299-Fang.collizion_m->width;
-    Fang.collizion_m->top   = 1077.61;
-    Fang.speed_m = Vector2f(0.001, 0);
-    Time tm = microseconds(8333);
-    MoveTroughtTilesAndCollide(levelTiles, *Fang.collizion_m, Fang.speed_m, tm);
-    //__asm{int 3}
-}
-
 
 
 int main()
@@ -147,7 +82,7 @@ int main()
 
     vector<Entity*> entitiesOnLevel;
 
-    PlayableCharacter Fang(&FangCollizion ,&sprt, &entitiesOnLevel);
+    PlayableCharacter Fang(&FangCollizion ,&sprt);
     Fang.locationMap_m = &levelTiles;
     Fang.state_m = PlayableCharacter::State_m::inAir;
 

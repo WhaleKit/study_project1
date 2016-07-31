@@ -20,7 +20,7 @@ using namespace std;
 
 /*
 мои алгоритмы отличаютс€ тем, что они не сохран€ют пор€док, т.к. поведение сцены
-не зависит от пор€дка обновлени€ энтити в главном цикле (по крайней мере не должно)
+не зависит от пор€дка обновлени€ энтити в главном цикле (по крайней мере не должно),
 а значит пор€док не важен
 */
 /*
@@ -47,7 +47,6 @@ public:
     void Update(Time time_arg)
     {
         //update-методы
-        //for (Entity* toUpdate : make_range(Entities_m.begin(), Entities_m.begin()+activeEntitiesEnd_m))
         for (entityNum toUpdIndex=0; toUpdIndex<activeEntitiesEnd_m; ++toUpdIndex)
         {
             Entity *& toUpdate = Entities_m[toUpdIndex];
@@ -91,6 +90,7 @@ public:
             }
         }
 
+        //энтити добавл€ют действи€ в очередь на основе текущих данных об энтити
         for (Entity* toAct : make_range(Entities_m.begin(), Entities_m.begin()+activeEntitiesEnd_m))
         {
             toAct->Act(this);
@@ -98,6 +98,7 @@ public:
 
         DoPlannedActions();
     }
+    //методы, €вл€ющиес€ интерфейсом, предназначенным дл€ использовани€ в entity::Act()
     entityNum numOfEntities ()
     {
         return Entities_m.size();
@@ -120,6 +121,14 @@ public:
     {
         entitiesToAdd_m.push(toAdd_arg);
     }
+    //конец методов, €вл€ющиихс€ интерфейсом, предназначенным дл€ использовани€ в entity::Act()
+    /*если кому-то еще понадобитс€ доступ к EntityContainer, мне придетс€ создавать
+    класс представитель EntityContainer дл€ entity::act(), или передавать ему
+    указатель на EntityContainer как на объект, реализующий интерфейс,
+    чтобы ограничить спект действий со стороны entity::act()
+    но пока € не вижу, кому еще может понадобитс€ entityContainer, кроме ф-ии где он запущен
+    и самим энтити дл€ доступа друг к другу дл€ чтени€ или через запланированные действи€
+    */
 protected:
     void RemoveEnabledEntity(entityNum toRemove_arg)
     {
@@ -174,14 +183,24 @@ protected:
         while (!actions_m.isEmpty())
         {
             ActionOnEntity* actPtr = (ActionOnEntity*)(actions_m.getTopPointer());
-            actPtr->action(Entities_m[actPtr->subjectNum]
-                           , reinterpret_cast<uint8_t*>(actPtr)+sizeof(ActionOnEntity) );
-            //в стэке действий данные дл€ действи€ идут сразу за действием,
-            //так что указатель на доп. данные - это указатель на месту сразу за действием
 
-            actions_m.popWithoutGetting( actPtr->dataSize + sizeof(ActionOnEntity) );
+            Entity* subjectsArr[actPtr->numberOfSubjects];
+            for (size_t i=0; i < actPtr->numberOfSubjects; ++i)
+            {
+                //список номеров субъектов идет сразу за объетом ActionOnEntity
+                size_t subjNum = ( reinterpret_cast<uint8_t*>(actPtr)+sizeof(ActionOnEntity) )[i];
+                subjectsArr[i] = Entities_m[subjNum];
+            }
+            //доп. данные идут сразу за объектом ActionOnEntity и списком номеров субъектов
+            actPtr->actionFn( const_cast<Entity*>(actPtr->object)
+                     , subjectsArr, actPtr->numberOfSubjects
+                     , reinterpret_cast<uint8_t*>(actPtr) + actPtr->SizeWithSubjectsListOnly()
+                             );
+
+
+            actions_m.popWithoutGetting( actPtr->SizeWithAllData() );
         }
-        while (entitiesToAdd_m.empty())
+        while (!entitiesToAdd_m.empty())
         {
             AddActiveEntity(entitiesToAdd_m.top());
             entitiesToAdd_m.pop();
@@ -189,10 +208,11 @@ protected:
     }
 
 private:
-    stack<Entity*>  entitiesToAdd_m;
+    stack <Entity*> entitiesToAdd_m;
     vector<Entity*> disabledEntities_m;
     vector<Entity*> Entities_m;
-    entityNum       activeEntitiesEnd_m=0;//до него идут активные энтити, после - неактивные
+    entityNum       activeEntitiesEnd_m=0;
+    //до activeEntitiesEnd_m идут активные энтити, после, начина€ с него - неактивные
     RuntimeSizedObjectsStack actions_m;
 };
 

@@ -21,8 +21,8 @@ float floorLevel = 1205;
 class PlayableCharacter : public Entity
 {
 public:
-    PlayableCharacter(FloatRect* collizion_arg, Sprite* renderComponent_arg, vector<Entity*>* environment_arg)
-    :   Entity(environment_m), collizion_m(collizion_arg), renderComponent_m(renderComponent_arg)
+    PlayableCharacter(FloatRect* collizion_arg, Sprite* renderComponent_arg, EntityContainer* environment_arg=nullptr)
+    :   Entity(environment_arg), collizion_m(collizion_arg), renderComponent_m(renderComponent_arg)
         ,walkingAnimation_m(renderComponent_arg, 0.000007, 4
                         ,[]( float currentFrame_arg, void* data_arg )->IntRect
                              {
