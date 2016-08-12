@@ -7,8 +7,9 @@
 #include "RuntimeSizedObjectsStack.h"
 #include "ActionOnEntity.h"
 
-static_assert(sizeof(uint8_t)==1, "ѕараной€");
 
+static_assert(sizeof(uint8_t)==1, "ѕараной€");
+class BulletPool;
 using namespace sf;
 using namespace std;
 
@@ -31,10 +32,19 @@ using namespace std;
 
 activeEntitiesEnd_m - номер первой неактивной энтити
 */
+class ActionsLibrary;
+class BulletPool;
+class SceneAdapterForEntity;
+
 class EntityContainer
 {
+    friend ActionsLibrary;
+    friend SceneAdapterForEntity;
 public:
-    typedef size_t entityNum ;
+    typedef size_t entityNum;
+    EntityContainer(vector<Entity*> && entitesContainer_arg  )
+        : Entities_m(entitesContainer_arg), activeEntitiesEnd_m(Entities_m.size())
+    {    }
     EntityContainer()
     {
 
@@ -44,60 +54,19 @@ public:
 
     }
 
-    void Update(Time time_arg)
-    {
-        //update-методы
-        for (entityNum toUpdIndex=0; toUpdIndex<activeEntitiesEnd_m; ++toUpdIndex)
-        {
-            Entity *& toUpdate = Entities_m[toUpdIndex];
+    void Update(Time time_arg); //главный цикл
 
-            switch (toUpdate->entityState_m.state_m)
-            {
-            case (EntityState::States::active):
-                break;
-            case (EntityState::States::disabled):
-                DisableEntity(toUpdIndex);
-                break;
-            case (EntityState::States::inactive):
-                DeactivateEntity(toUpdIndex);
-                break;
-            case (EntityState::States::waitForDeletion):
-                RemoveEnabledEntity(toUpdIndex);
-                break;
-            }
+    //I wanna draw everything
+    //I wanna draw
+    //Even though I could fail
+    void DrawEverything (sf::RenderTarget& rt_arg, sf::RenderStates rstates_arg = RenderStates::Default);
 
-            if (toUpdate->entityState_m.state_m == EntityState::States::active)
-                toUpdate->Update(time_arg);
+    SceneAdapterForEntity getSceneAdapter ();
 
-            switch (toUpdate->entityState_m.state_m)
-            {
-            case (EntityState::States::active):
-                break;
-            case (EntityState::States::disabled):
-                DisableEntity(toUpdIndex);
-                break;
-            case (EntityState::States::inactive):
-                DeactivateEntity(toUpdIndex);
-                break;
-            case (EntityState::States::inactiveForTime):
-                --(toUpdate->entityState_m.itersToActvate);
-                if(toUpdate->entityState_m.itersToActvate==0)
-                    toUpdate->entityState_m.state_m = EntityState::States::active;
-                break;
-            case (EntityState::States::waitForDeletion):
-                RemoveEnabledEntity(toUpdIndex);
-                break;
-            }
-        }
+    BulletPool* bulletPool_m = nullptr;//не забыть инициализировать при создании
+protected:
 
-        //энтити добавл€ют действи€ в очередь на основе текущих данных об энтити
-        for (Entity* toAct : make_range(Entities_m.begin(), Entities_m.begin()+activeEntitiesEnd_m))
-        {
-            toAct->Act(this);
-        }
-
-        DoPlannedActions();
-    }
+private:
     //методы, €вл€ющиес€ интерфейсом, предназначенным дл€ использовани€ в entity::Act()
     entityNum numOfEntities ()
     {
@@ -122,16 +91,11 @@ public:
         entitiesToAdd_m.push(toAdd_arg);
     }
     //конец методов, €вл€ющиихс€ интерфейсом, предназначенным дл€ использовани€ в entity::Act()
-    /*если кому-то еще понадобитс€ доступ к EntityContainer, мне придетс€ создавать
-    класс представитель EntityContainer дл€ entity::act(), или передавать ему
-    указатель на EntityContainer как на объект, реализующий интерфейс,
-    чтобы ограничить спект действий со стороны entity::act()
-    но пока € не вижу, кому еще может понадобитс€ entityContainer, кроме ф-ии где он запущен
-    и самим энтити дл€ доступа друг к другу дл€ чтени€ или через запланированные действи€
-    */
-protected:
+
+
     void RemoveEnabledEntity(entityNum toRemove_arg)
     {
+        Entities_m[toRemove_arg]->entityState_m.state_m = EntityState::States::deleted;
         if ( toRemove_arg<activeEntitiesEnd_m )//т.е. энтити находитс€ в секции активных
         {
             --activeEntitiesEnd_m;
@@ -145,9 +109,10 @@ protected:
             Entities_m.pop_back();
         }
     }
-    void RemoveDisabledEntity(entityNum toRemova_arg)
+    void RemoveDisabledEntity(entityNum toRemove_arg)
     {
-        disabledEntities_m[toRemova_arg] = disabledEntities_m.back();
+        disabledEntities_m[toRemove_arg]->entityState_m = EntityState::States::deleted;
+        disabledEntities_m[toRemove_arg] = disabledEntities_m.back();
         disabledEntities_m.pop_back();
     }
     entityNum DisableEntity(entityNum toDisable_arg)
@@ -197,7 +162,6 @@ protected:
                      , reinterpret_cast<uint8_t*>(actPtr) + actPtr->SizeWithSubjectsListOnly()
                              );
 
-
             actions_m.popWithoutGetting( actPtr->SizeWithAllData() );
         }
         while (!entitiesToAdd_m.empty())
@@ -207,7 +171,6 @@ protected:
         }
     }
 
-private:
     stack <Entity*> entitiesToAdd_m;
     vector<Entity*> disabledEntities_m;
     vector<Entity*> Entities_m;
@@ -215,5 +178,6 @@ private:
     //до activeEntitiesEnd_m идут активные энтити, после, начина€ с него - неактивные
     RuntimeSizedObjectsStack actions_m;
 };
+
 
 #endif // ENTITYCONTAINER_H

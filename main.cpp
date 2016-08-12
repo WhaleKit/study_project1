@@ -16,9 +16,16 @@
 #include <SFML/Audio.hpp>
 
 #include "Animator.h"
+#include "Bullet.h"
 #include "PlayableCharacter.h"
+
+#include "EntityContainer.h"
+
 #include "Tileset2d.h"
 #include "Range.h"
+
+
+#include "BulletPool.h"
 
 using namespace std;
 using namespace sf;
@@ -69,6 +76,19 @@ int main()
         }
     }
 
+    //Bullet sprite да, это белый квадрат.
+    sf::Texture whiteTxtr;
+    whiteTxtr.create(1,1);
+    {
+        sf::Image onePix;
+        onePix.create(1,1, sf::Color(255,255,255,255));
+        whiteTxtr.loadFromImage(onePix);
+    }
+    whiteTxtr.setRepeated(true);
+    Sprite whiteBox(whiteTxtr);
+    whiteBox.setScale( Vector2f(2,2) );
+
+
     //playable character
     sf::Texture myTxtr;
     myTxtr.loadFromFile("spriteSheet.png");
@@ -80,15 +100,20 @@ int main()
     FloatRect FangCollizion = sprt.getGlobalBounds();
     FangCollizion.height-=FangCollizion.height*0.0001; //это чтобы он мог проходить в проходы высотой с него
 
-    vector<Entity*> entitiesOnLevel;
+
 
     PlayableCharacter Fang(&FangCollizion ,&sprt);
     Fang.locationMap_m = &levelTiles;
     Fang.state_m = PlayableCharacter::State_m::inAir;
-
-    //level content динамическая память
+    Fang.bulletSprite = &whiteBox;
+    //level content
+    vector<Entity*> entitiesOnLevel;
+    entitiesOnLevel.reserve(16);
     entitiesOnLevel.push_back(&Fang);
+    EntityContainer scene( move(entitiesOnLevel) );
 
+    BulletPool levelContentBulletsPool;
+    scene.bulletPool_m = &levelContentBulletsPool;
 
     //View
     sf::View myCamera;
@@ -117,20 +142,15 @@ int main()
         }
 
 
-        for (Entity* toUpdate : entitiesOnLevel)
-        {
-            toUpdate->Update(/*frameTime*/ minFrameTime );
-        }
+        scene.Update(minFrameTime);
 
         //rendering
         myCamera.setCenter(Vector2f (Fang.collizion_m->left +Fang.collizion_m->width/2,
                                        Fang.collizion_m->top+Fang.collizion_m->height/2) );
         window.setView(myCamera);
-        for (Entity* toDraw : entitiesOnLevel)
-        {
-            if (toDraw!=nullptr)
-                window.draw( *(toDraw->getDrawableComponent()) );
-        }
+
+        scene.DrawEverything(window);
+
         for (int x=0; x<levelTiles.getWidth(); ++x)
             for (int y=0; y<levelTiles.getHeight(); ++y)
         {

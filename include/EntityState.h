@@ -13,11 +13,12 @@
 //active   - рисуется, для него вызывается метод update
 //waitForDeletion - удаляется при проходе главным циклом
 
+//deleted - маркер того, что entity можно удалять/вернуть в пул объектов и указателя на него у контейнера не осталось
 
 struct EntityState
 {
 public:
-    enum class States {disabled, inactive, inactiveForTime, active, waitForDeletion};
+    enum class States {disabled, inactive, inactiveForTime, active, waitForDeletion, deleted};
         EntityState(States state_arg = States::active, sf::Uint8 iters_arg = 0)
         :state_m(state_arg), itersToActvate(iters_arg)
         {}

@@ -9,13 +9,13 @@
 using namespace std;
 using namespace sf;
 
-class EntityContainer;
+class SceneAdapterForEntity;
 
 class Entity
 {
 public:
     Entity (){}
-    Entity ( EntityContainer * where_arg)
+    Entity ( SceneAdapterForEntity * where_arg)
         :environment_m(where_arg), entityState_m (EntityState::States::active)
     {   }
 
@@ -24,7 +24,7 @@ public:
     virtual void Update(sf::Time frameTime_arg)=0;
     //обновляет и делает цельными свои данные
 
-    virtual void Act (EntityContainer* where_agr) const =0;
+    virtual void Act (SceneAdapterForEntity* where_agr) const =0;
     //действует на других, получает информацию об окружении
 
 
@@ -32,7 +32,7 @@ public:
     //хотя это не очень-то эффективно, если я буду делать много энтити не предназначенных для рисования, лучше
     //использовать флаг drawable, или пересмотреть функции этого класса
 
-    EntityContainer *environment_m;
+    SceneAdapterForEntity *environment_m;
     EntityState entityState_m;
 };
 

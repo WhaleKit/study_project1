@@ -1,6 +1,10 @@
 #ifndef RANGE_H
 #define RANGE_H
 
+#include <utility>
+
+using namespace std;
+
 //говорят, в range-base loop нельзя запихать пару итераторов...
 //но они ошибаются
 

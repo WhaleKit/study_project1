@@ -15,8 +15,8 @@
 Зато гарантируется постоянство адресов действия относительно друг друга и их порядок.
 Это позволяет нескольким "действиям" разделять общие данные.
 Например: складываем действие 1, затем действие 2. 2 выполняется первым, оно
-ориентируясь за счет своего адреса идет к данным действия 1, записывает туда что-то,
-затем действие 1 исходит из этих данных - "отчета" от действия 2.
+ориентируясь за счет своего адреса идет к данным действия 1, записывает туда что-то (отчет),
+затем действие 1 исходит из этих данных.
 */
 
 /*Вот какполная запись действия вместе с параметрами выглядит в памяти в стэке:
@@ -41,6 +41,13 @@
 struct ActionOnEntity
 {
     typedef  void (*ActionFunction) (Entity* object, Entity** subjectsList, size_t subjectsNum, void* data);
+    ActionOnEntity () {};
+    ActionOnEntity (ActionFunction af_arg, Entity const* obj_arg, size_t numberOfSubj_arg = 1
+                    ,size_t dataSize_arg = 0)
+    : actionFn(af_arg), object(obj_arg), numberOfSubjects(numberOfSubj_arg), dataSize(dataSize_arg)
+    {
+
+    }
     ActionFunction actionFn=nullptr;
     Entity const* object=nullptr;
 
