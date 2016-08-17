@@ -54,18 +54,18 @@ class RuntimeSizedObjectsStack
         }
         void popWithoutGetting (size_t size_arg)
         {
-            stackTopShift_m+=size_arg;
+            stackTopShift_m-=size_arg;
         }
         template<typename T>
         void popAndDestroy()
         {
             T* ptr = reinterpret_cast<T*>(getTopPointer());
             ptr->~T();//надеюсь, это вызовет дествуктор, а не функцию член SomeType::~T()
-            stackTopShift_m+=sizeof(T);
+            stackTopShift_m-=sizeof(T);
         }
         void pushMemory(uint8_t* ptrToData_arg, size_t size_arg)
         {
-            stackTopShift_m -= size_arg;
+            stackTopShift_m += size_arg;
             if (stackTopShift_m>bufferSize_m)
                 MoveToNewBuffer();
 
@@ -74,7 +74,7 @@ class RuntimeSizedObjectsStack
         template<typename T>
         void push(T& objToPush_arg)
         {
-            stackTopShift_m -= sizeof(T);
+            stackTopShift_m += sizeof(T);
             if (stackTopShift_m>bufferSize_m)
                 MoveToNewBuffer();
 
@@ -84,7 +84,7 @@ class RuntimeSizedObjectsStack
         template<typename T>
         void push(T&& objToPush_arg)
         {
-            stackTopShift_m -= sizeof(T);
+            stackTopShift_m += sizeof(T);
             if (stackTopShift_m>bufferSize_m)
                 MoveToNewBuffer();
 

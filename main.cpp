@@ -26,6 +26,7 @@
 
 
 #include "BulletPool.h"
+#include "NPC_Dummy.h"
 
 using namespace std;
 using namespace sf;
@@ -96,9 +97,8 @@ int main()
     sprt.setTexture(myTxtr);
     sprt.setTextureRect( IntRect(0, 364, 108 , 182) );
     sprt.setScale(0.7,0.7);
-    sprt.setPosition(-300, -200);
+    sprt.setPosition(300, -200);
     FloatRect FangCollizion = sprt.getGlobalBounds();
-    FangCollizion.height-=FangCollizion.height*0.0001; //это чтобы он мог проходить в проходы высотой с него
 
 
 
@@ -106,10 +106,26 @@ int main()
     Fang.locationMap_m = &levelTiles;
     Fang.state_m = PlayableCharacter::State_m::inAir;
     Fang.bulletSprite = &whiteBox;
+
+    //dummy
+    Texture dummyTxtr;
+    dummyTxtr.loadFromFile("dummy.png");
+
+    NPC_Dummy dummy;
+    dummy.locationMap_m = &levelTiles;
+    Sprite dummySprite;
+    dummySprite.setTexture(dummyTxtr);
+    dummySprite.setScale(0.7, 0.7);
+    dummy.drawableComponent_m = &dummySprite;
+    dummy.collizion_m = dummySprite.getGlobalBounds();
+    dummy.collizion_m.left = 1250;
+    dummy.collizion_m.top = 000;
+
     //level content
     vector<Entity*> entitiesOnLevel;
     entitiesOnLevel.reserve(16);
     entitiesOnLevel.push_back(&Fang);
+    entitiesOnLevel.push_back(&dummy);
     EntityContainer scene( move(entitiesOnLevel) );
 
     BulletPool levelContentBulletsPool;
