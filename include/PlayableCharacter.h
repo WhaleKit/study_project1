@@ -3,12 +3,17 @@
 
 #include <SFML/Graphics.hpp>
 #include <SFML/Audio.hpp>
+#include <iostream>
 
-
+#include "Animator.h"
 #include "Tileset2d.h"
 #include "fpoint_tweaks.h"
 #include "Entity.h"
 #include "GeometryFunctions.h"
+#include "EntityContainer.h"
+
+#include "Bullet.h"
+#include "BulletPool.h"
 
 using namespace std;
 using namespace sf;
@@ -16,16 +21,17 @@ using namespace sf;
 constexpr float gravityAcceleration = 4*0.98;
 constexpr float footingDistance = 0.001;
 
-float floorLevel = 1205;
+constexpr float floorLevel = 1205;
+
 class PlayableCharacter : public Entity
 {
 public:
     PlayableCharacter(FloatRect* collizion_arg, Sprite* renderComponent_arg)
-    :   collizion_m(collizion_arg), renderComponent_m(renderComponent_arg)
+    :   Entity(), collizion_m(collizion_arg), renderComponent_m(renderComponent_arg)
         ,walkingAnimation_m(renderComponent_arg, 0.000007, 4
                         ,[]( float currentFrame_arg, void* data_arg )->IntRect
                              {
-                                return IntRect(108*int(currentFrame_arg), 364, 108 , 182) ;
+                                return IntRect(108*int(currentFrame_arg), 364, 108 , 182);
                              }
                          ,nullptr )
         ,idleAnimation_m(renderComponent_arg, 0.000001, 5
@@ -36,6 +42,18 @@ public:
                                 else
                                     return IntRect(216+108*int(currentFrame_arg), 0, 108 , 182);
                             }
+                         ,nullptr)
+         ,walkingShootingAnimation_m(renderComponent_arg, 0.000007, 4
+                         ,[](float currentFrame_arg, void* data_arg)->IntRect
+                             {
+                                 return IntRect(108*int(currentFrame_arg), 182, 108 , 182);
+                             }
+                         ,nullptr)
+        ,stayShootingAnimation_m(renderComponent_arg, 0.000007, 2
+                         ,[](float currentFrame_arg, void* data_arg)->IntRect
+                             {
+                                 return IntRect(111*int(currentFrame_arg), 0, 108 , 182);
+                             }
                          ,nullptr)
     {    }
 
@@ -68,14 +86,12 @@ public:
                 if ( sf::Keyboard::isKeyPressed(sf::Keyboard::A) )
                 {
                     facingLeft_m = true;
-                    if (speed_m.x<0)
+
+                    //модно разгонятся в воздухе не больше скорости ходьбы
+                    //но если вы уже разогнаны - вы не затормозите, но и сильнее не разгонитесь
+                    if(-speed_m.x < walkingSpeed_m)
                     {
-                        //модно разгонятся в воздухе не больше скорости ходьбы
-                        //но если вы уже разогнаны - вы не затормозите, но и сильнее не разгонитесь
-                        if(-speed_m.x < walkingSpeed_m)
-                        {
-                            speed_m.x -= airAcceleration_m;
-                        }
+                        speed_m.x -= airAcceleration_m;
                     }
                 }
                 else//нажата D
@@ -98,6 +114,9 @@ public:
             state_m = State_m::inAir;
             speed_m.y = -jumpingSpeed_m;
         }
+
+        isShooting_m = sf::Keyboard::isKeyPressed(sf::Keyboard::LShift);
+
         if (sf::Keyboard::isKeyPressed(Keyboard::T))
         {
             cout << "teleportation: enter top: ";
@@ -109,33 +128,73 @@ public:
 
     void SelectPropperAnimation()
     {
-
-        switch ( state_m)
+        switch (state_m)
         {
         case State_m::standing:
-            if (weaponState_m==WeaponState_m::noWeapon)
-                currentAnimation_m = &idleAnimation_m;
+            if (!isShooting_m)
+                currentAnimation_m = &PlayableCharacter::idleAnimation_m;
             else
                 {
-                    //todo
+                    currentAnimation_m = &PlayableCharacter::stayShootingAnimation_m;
                 }
             break;
         case State_m::walking:
-            if (weaponState_m==WeaponState_m::noWeapon)
-                currentAnimation_m = &walkingAnimation_m;
+            if (!isShooting_m)
+                currentAnimation_m = &PlayableCharacter::walkingAnimation_m;
             else
                 {
-                    //todo
+                    currentAnimation_m = &PlayableCharacter::walkingShootingAnimation_m;
                 }
+            break;
+        default:
             break;
         }
 
-        currentAnimation_m->setFacingLeft(facingLeft_m);
+        (this->*currentAnimation_m).setFacingLeft(facingLeft_m);
     }
 
-    #define debuglogging
+
+    void Shoot(SceneAdapterForEntity* environment_arg) const
+    {
+        //timeSinceLastShoot_m -= shootingInterval_m; это произойдет в update()
+        Bullet* toShoot = environment_arg->getBulletPool()->TakeFreeObject();
+
+        toShoot->entityState_m.state_m = EntityState::States::active;
+        toShoot->bulletDmg_m = Damage(6);
+        toShoot->whoShooted_m = const_cast<PlayableCharacter*>(this); //WARNING!! CONSTCAST
+        toShoot->speed_m = Vector2f(facingLeft_m? -0.001f : 0.001f , 0);
+        toShoot->environment_m = environment_arg;
+        toShoot->locationMap_m = locationMap_m;
+        toShoot->moveFrameAgo_m= Vector2f(0,0);
+
+        toShoot->drawableComponent_m = bulletSprite;
+        toShoot->collizion_m = bulletSprite->getGlobalBounds();
+        toShoot->collizion_m.top = this->collizion_m->top+36;//ствол на спрайте находится на высоте 36 пикс
+        if (facingLeft_m)
+        {
+            toShoot->collizion_m.left = LittleLessThan(collizion_m->left - toShoot->collizion_m.width) ;
+        }
+        else
+        {
+            toShoot->collizion_m.left = LittleMoreThan(collizion_m->left + collizion_m->width);
+        }
+        environment_arg->PlanSpawnEntity(toShoot);
+    }
+
+    //#define debuglogging
+    void Act(SceneAdapterForEntity* environment_arg) const override
+    {
+        if (isShooting_m && timeSinceLastShoot_m > shootingInterval_m)
+        {
+            Shoot(environment_arg);
+        }
+    }
+
     void Update(sf::Time frameTime_arg) override
     {
+        if (timeSinceLastShoot_m > shootingInterval_m)
+            timeSinceLastShoot_m -= shootingInterval_m;
+
         readApplyUserInput();
 
 
@@ -151,22 +210,20 @@ public:
             cout << "mics: "<< ( accumulate(frameTimes.begin(), frameTimes.end(), 0) / 400)  << endl;
         }*/
 
-        currentAnimation_m->timePassed(frameTime_arg);
+        (this->*currentAnimation_m).timePassed(frameTime_arg);
 
 
         if (state_m == State_m::standing)
         {
             speed_m.x = 0;
-            speed_m.y=0;
+            speed_m.y = 0;
         }
-
 
         if (state_m == State_m::inAir)
         {
 
-            speed_m.y += frameTime_arg.asMicroseconds()* gravityAcceleration/(1000000000);
+            speed_m.y += frameTime_arg.asMicroseconds()* gravityAcceleration/(1000000000.0f);
         }
-
 
     #ifdef debuglogging
     #include <iostream>
@@ -209,14 +266,13 @@ public:
             //onGround_m=true;
         }
         SelectPropperAnimation();
-
+        timeSinceLastShoot_m += frameTime_arg;
 
     }
 
     sf::Drawable* getDrawableComponent() override
     {
         //приводим спрайт в соотв. с состоянием персонажа и отдаем
-
 
         renderComponent_m->setPosition( Vector2f(collizion_m->left, collizion_m->top)
                                         +spriteCoordRelativeToCollision_m
@@ -230,30 +286,33 @@ public:
     //смещение левого верхнего угла спрайта от верхнего левого угла коллизии
 
 
-    Animator walkingAnimation_m;
-    Animator idleAnimation_m;
-    //todo еще 2 анимации
-
-    Animator* currentAnimation_m=&idleAnimation_m;
+    Animator PlayableCharacter::*  currentAnimation_m= &PlayableCharacter::idleAnimation_m;
     enum class State_m {walking, standing, inAir};
     State_m state_m         = State_m::standing;
-    enum class WeaponState_m {noWeapon, pistol};
-    WeaponState_m weaponState_m = WeaponState_m::noWeapon;
+    bool isShooting_m       = false;
     bool facingLeft_m       = false; //в противном случае смотрит вправо
-
-    Vector2f speed_m        = Vector2f(0,0);
+    Time timeSinceLastShoot_m = microseconds(0);
+    Vector2f speed_m            = Vector2f(0,0);
 
     //скорость - в пикселях в микросекунду
     float jumpingSpeed_m        = 0.002;    //вертикальная скорость, которая ему придается при прыжке
     float walkingSpeed_m        = 0.001;    //скорость, с которой он ходит
-    float airAcceleration_m     = 0.00002;      //ускорение в воздухе
-    float animSpeed_m           = 0.00001;  // смен кадров в микросекунду
+    float airAcceleration_m     = 0.00002;  //ускорение в воздухе
+    float animSpeed_m           = 0.00001;  //смен кадров в микросекунду
     sf::FloatRect* collizion_m  = nullptr;
     Sprite* renderComponent_m   = nullptr;
 
     Tileset2d* locationMap_m    = nullptr;
-    //<Entity>, с полем vector<Entity*> *environment_m, которая родитель
-    //будет использоваться позже, для взаимодействия с миром
-};
+    Time shootingInterval_m     = seconds(1.0f/4);
 
+
+
+    Animator walkingAnimation_m;
+    Animator idleAnimation_m;
+    Animator walkingShootingAnimation_m;
+    Animator stayShootingAnimation_m;
+    //todo еще 2 анимации
+
+    static Sprite* bulletSprite;
+};
 #endif // PLAYABLECHARACTER_H

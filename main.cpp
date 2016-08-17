@@ -16,80 +16,22 @@
 #include <SFML/Audio.hpp>
 
 #include "Animator.h"
+#include "Bullet.h"
 #include "PlayableCharacter.h"
+
+#include "EntityContainer.h"
+
 #include "Tileset2d.h"
+#include "Range.h"
+
+
+#include "BulletPool.h"
+#include "NPC_Dummy.h"
 
 using namespace std;
 using namespace sf;
 
-void DoNothing()
-{
-    ;
-}
 
-int main_()
-{
-//tiles
-    Tile stone;
-    stone.solid_m = true;
-    sf::RectangleShape stoneTileShape(Vector2f(100, 100));
-    stoneTileShape.setFillColor(sf::Color( 200, 200, 200));
-    stone.drawableComponent = &stoneTileShape;
-
-    //levelMap
-    //Tile* levelTiles[levelWidth][levelHight];
-    Tileset2d levelTiles(24,11);
-    {
-        constexpr char const* levelCheme[] =
-        {
-            "s                      s",
-            "s                      s",
-            "s   ssssssss  ssssssssss",
-            "s                      s",
-            "s   sssss              s",
-            "s                      s",
-            "s         sssss        s",
-            "s             s        s",
-            "s          ssss        s",
-            "s             s        s",
-            "ssss sssssssssssssssssss"
-        };
-
-        for (int x=0; x<levelTiles.getWidth(); ++x)
-            for (int y=0; y<levelTiles.getHeight(); ++y)
-        {
-            switch (levelCheme[y][x])
-            {
-            case 's':
-                levelTiles.at(x, y) = &stone;
-                break;
-            default:
-                break;
-            }
-        }
-    }
-
-    //playable character
-    sf::Texture myTxtr;
-    myTxtr.loadFromFile("spriteSheet.png");
-    sf::Sprite sprt;
-    sprt.setTexture(myTxtr);
-    sprt.setTextureRect( IntRect(0, 364, 108 , 182) );
-    sprt.setScale(0.7,0.7);
-    sprt.setPosition(-300, -200);
-    FloatRect FangCollizion = sprt.getGlobalBounds();
-    FangCollizion.height-=FangCollizion.height*0.0001; //это чтобы он мог проходить в проходы высотой с него
-    PlayableCharacter Fang(&FangCollizion ,&sprt);
-    Fang.locationMap_m = &levelTiles;
-    Fang.state_m = PlayableCharacter::State_m::inAir;
-
-    Fang.collizion_m->left  = -8.33299-Fang.collizion_m->width;
-    Fang.collizion_m->top   = 1077.61;
-    Fang.speed_m = Vector2f(0.001, 0);
-    Time tm = microseconds(8333);
-    MoveTroughtTilesAndCollide(levelTiles, *Fang.collizion_m, Fang.speed_m, tm);
-    DoNothing();
-}
 
 
 int main()
@@ -135,6 +77,19 @@ int main()
         }
     }
 
+    //Bullet sprite да, это белый квадрат.
+    sf::Texture whiteTxtr;
+    whiteTxtr.create(1,1);
+    {
+        sf::Image onePix;
+        onePix.create(1,1, sf::Color(255,255,255,255));
+        whiteTxtr.loadFromImage(onePix);
+    }
+    whiteTxtr.setRepeated(true);
+    Sprite whiteBox(whiteTxtr);
+    whiteBox.setScale( Vector2f(2,2) );
+
+
     //playable character
     sf::Texture myTxtr;
     myTxtr.loadFromFile("spriteSheet.png");
@@ -142,17 +97,39 @@ int main()
     sprt.setTexture(myTxtr);
     sprt.setTextureRect( IntRect(0, 364, 108 , 182) );
     sprt.setScale(0.7,0.7);
-    sprt.setPosition(-300, -200);
+    sprt.setPosition(300, -200);
     FloatRect FangCollizion = sprt.getGlobalBounds();
-    FangCollizion.height-=FangCollizion.height*0.0001; //это чтобы он мог проходить в проходы высотой с него
+
+
+
     PlayableCharacter Fang(&FangCollizion ,&sprt);
     Fang.locationMap_m = &levelTiles;
     Fang.state_m = PlayableCharacter::State_m::inAir;
+    Fang.bulletSprite = &whiteBox;
 
-    //level content динамическая память
+    //dummy
+    Texture dummyTxtr;
+    dummyTxtr.loadFromFile("dummy.png");
+
+    NPC_Dummy dummy;
+    dummy.locationMap_m = &levelTiles;
+    Sprite dummySprite;
+    dummySprite.setTexture(dummyTxtr);
+    dummySprite.setScale(0.7, 0.7);
+    dummy.drawableComponent_m = &dummySprite;
+    dummy.collizion_m = dummySprite.getGlobalBounds();
+    dummy.collizion_m.left = 1250;
+    dummy.collizion_m.top = 000;
+
+    //level content
     vector<Entity*> entitiesOnLevel;
+    entitiesOnLevel.reserve(16);
     entitiesOnLevel.push_back(&Fang);
+    entitiesOnLevel.push_back(&dummy);
+    EntityContainer scene( move(entitiesOnLevel) );
 
+    BulletPool levelContentBulletsPool;
+    scene.bulletPool_m = &levelContentBulletsPool;
 
     //View
     sf::View myCamera;
@@ -181,19 +158,15 @@ int main()
         }
 
 
-        for (Entity* toUpdate : entitiesOnLevel)
-        {
-            toUpdate->Update(/*frameTime*/ minFrameTime );
-        }
+        scene.Update(minFrameTime);
 
         //rendering
         myCamera.setCenter(Vector2f (Fang.collizion_m->left +Fang.collizion_m->width/2,
                                        Fang.collizion_m->top+Fang.collizion_m->height/2) );
         window.setView(myCamera);
-        for (Entity* toDraw : entitiesOnLevel)
-        {
-            window.draw( *(toDraw->getDrawableComponent()) );
-        }
+
+        scene.DrawEverything(window);
+
         for (int x=0; x<levelTiles.getWidth(); ++x)
             for (int y=0; y<levelTiles.getHeight(); ++y)
         {
